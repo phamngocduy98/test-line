@@ -1,0 +1,1001 @@
+tc_id,tech lte,tech nsa,tech nr sa,enb,vdu,au,cu,lte band,nr band,ru,cc location,ca type,rf condition,ue capa lte,ue capa nr,ue capa special
+1,1,0,0,1,0,0,0,any,,any,,inter DU,mobility,volte,,any
+2,1,1,1,1,2,0,1,b5 + b20,any + intra,any + any,any,any,any,nsa,nsa,any
+3,1,0,0,2,0,0,1,any + inter,,rf-1006 + rf-1004 + rf-1005,any,any,cell edge,any,,s23+
+4,1,1,0,1,1,0,1,b2 + b2,any + intra,rf-1006,any,inter CU,any,any,any,
+5,0,0,1,0,1,0,1,b5 + b28,n78 + n78,rf-1000,any,intra DU,handover,,nr,s21
+6,1,0,0,1,0,0,0,b28 + b20,,any,any,inter DU,any,any,,
+7,1,0,0,1,0,0,1,any,,any + any,,any,mobility,emtc,,any
+8,1,0,0,1,0,0,0,b28 + b28,,any + any + any,any,any,any,any,,
+9,1,1,0,1,1,0,0,any + inter,n77 + n28,rf-1007,any,inter CU,peak 4 path,emtc,nr,any
+10,1,1,1,1,1,0,1,b7 + b2,any,rf-1007 + rf-1001,inter cc,non ca,any,any,any,6cc
+11,1,0,0,1,0,1,0,any + intra,,any,intra cc,any,any,volte,,
+12,1,0,0,1,1,0,0,b28 + b28,,rf-1003 + rf-1000 + rf-1005 + rf-1006,any,any,mobility,any,,s21
+13,1,0,0,1,0,0,0,b3 + b7,,rf-1005 + rf-1000,any,any,mobility,any,,s21
+14,1,0,0,1,0,0,0,b7 + b7,,rf-1001 + rf-1003,,inter DU,any,any,,
+15,1,1,1,1,1,0,1,any,any,rf-1001,any,inter DU,null,nsa,nsa,
+16,1,1,0,1,2,0,0,any,any,rf-1007,any,any,handover,any,any,
+17,1,1,1,1,1,0,3,any + inter,n7 + n7,rf-1000,any,any,peak 4 path,any,any,any
+18,1,0,0,1,0,0,0,any,,any + any + any,intra cc,inter DU,any,any,,
+19,1,0,0,2,0,0,2,any,,any,inter cc,any,mobility,any,,
+20,1,1,0,1,2,1,0,any,n77 + n28,rf-1007,any,intra DU,any,any,nr,6cc
+21,1,0,0,1,0,0,0,any,,any,any,intra DU,any,any,,s23+
+22,1,0,0,2,1,0,0,any + inter,,rf-1006 + rf-1002,inter cc,inter DU,mobility,volte,,s21
+23,1,0,0,3,0,0,0,b3 + b3,,rf-1007 + rf-1004 + rf-1000,inter cc,inter CU,any,any,,s21
+24,1,0,0,1,1,0,0,any,,rf-1000 + rf-1004,intra cc,inter DU,,any,,
+25,1,0,0,1,0,0,0,any,,any + any,,any,cell edge,any,,s21
+26,1,0,0,1,0,0,0,any + intra,,rf-1003,any,any,any,emtc,,any
+27,1,0,0,1,0,0,0,any,,any + any + any + any,,any,any,volte,,s23+
+28,1,0,0,2,1,1,0,any + intra,,rf-1004,any,inter DU,any,emtc,,
+29,1,1,0,1,1,0,0,any + intra,any,rf-1003 + rf-1007,inter cc,any,peak 4 path,nsa,nsa,any
+30,1,1,1,1,2,0,1,any,any + intra,rf-1001 + rf-1003,,inter DU,cell edge,nsa,any,
+31,0,0,1,0,3,0,3,b7 + b7,n28 + n3,rf-1007 + rf-1001,any,any,null,,nr,s21
+32,1,1,1,1,2,0,2,any + inter,n7 + n7,any + any,intra cc,any,handover,nsa,any,
+33,1,1,1,2,2,1,1,any + intra,n77 + n3,rf-1005 + rf-1007,any,intra DU,,nsa,any,
+34,1,1,1,2,1,0,1,b7,any,rf-1007,any,intra DU,any,emtc,any,
+35,1,0,0,1,0,0,0,any + intra,,rf-1003,intra cc,inter CU,any,any,,any
+36,1,0,0,1,0,0,0,any,,any,any,inter CU,any,any,,
+37,0,0,1,0,1,0,1,b8 + b5,n7 + n7,any,inter cc,any,,,nr,
+38,1,1,0,1,2,0,0,any,n1,rf-1006,any,any,null,emtc,any,
+39,1,0,0,1,0,0,0,any,,rf-1002 + rf-1007,any,non ca,handover,any,,6cc
+40,1,1,0,3,2,1,1,any,n1,rf-1000,any,any,cell edge,nsa,nsa,s21
+41,1,1,0,1,1,1,1,b1 + b8,n28,any,any,any,peak 4 path,any,any,
+42,0,0,1,1,1,0,1,b5 + b3,n77 + n28,any + any,intra cc,non ca,peak 4 path,,nr,
+43,0,0,1,0,1,0,1,any,any + inter,any + any,any,any,any,,any,
+44,0,0,1,1,1,0,1,any,any,rf-1001 + rf-1004 + rf-1000,any,inter DU,null,,any,6cc
+45,1,1,0,1,1,0,0,any,n3,rf-1000,inter cc,non ca,any,any,nr,s23+
+46,1,0,0,1,0,0,0,b8,,rf-1004 + rf-1001,inter cc,any,mobility,emtc,,s21
+47,1,1,0,1,3,0,2,any + intra,any + intra,rf-1006 + rf-1000,any,non ca,any,volte,any,s23+
+48,1,0,0,1,1,0,2,b20 + b20,,rf-1006 + rf-1004,intra cc,any,any,emtc,,any
+49,1,1,0,1,1,0,0,any + inter,n3,rf-1006,any,any,null,volte,nr,s21
+50,0,0,1,0,1,0,1,b8,n77 + n77,rf-1004,inter cc,any,any,,any,any
+51,1,1,0,1,1,0,1,any,any + inter,any,,any,,volte,any,
+52,1,1,0,1,2,0,1,any + inter,n28 + n28,any,,non ca,,any,nsa,
+53,1,1,1,1,1,0,1,b3,n28 + n77,rf-1003 + rf-1006,intra cc,non ca,any,volte,nr,
+54,0,0,1,0,1,0,1,any,any,any,inter cc,non ca,handover,,any,any
+55,1,1,0,1,1,0,0,any + intra,any,rf-1007 + rf-1004,any,intra DU,mobility,any,nsa,
+56,1,0,0,2,0,0,0,b3,,any + any + any,inter cc,inter DU,any,emtc,,any
+57,1,0,0,1,0,1,0,b7 + b7,,rf-1006 + rf-1000,any,any,any,any,,s23+
+58,0,0,1,0,2,0,1,any,n1 + n1,any,any,intra DU,any,,any,
+59,1,0,0,1,0,0,1,b20 + b20,,rf-1007,inter cc,inter DU,null,volte,,
+60,1,0,0,1,0,0,0,any + intra,,rf-1004,any,any,any,any,,6cc
+61,1,1,0,1,2,0,0,any + intra,any,rf-1005 + rf-1002,,any,cell edge,volte,nr,
+62,1,1,0,2,2,0,0,b20,n78,rf-1006,any,any,any,any,nsa,
+63,1,1,0,1,1,0,0,any + intra,n41 + n41,rf-1003 + rf-1006,,inter DU,,any,nsa,
+64,0,0,1,1,1,0,2,,n77 + n5,rf-1005,any,intra DU,any,,any,
+65,1,1,1,1,3,1,1,b28,n5 + n5,rf-1001,any,inter DU,null,nsa,nsa,
+66,1,1,0,1,1,0,0,any,any,any + any,any,inter DU,mobility,any,nr,any
+67,1,1,0,1,1,1,0,b5 + b28,n41,any + any,inter cc,intra DU,any,nsa,nsa,any
+68,1,0,0,2,0,1,0,b2 + b28,,rf-1001,,any,null,emtc,,any
+69,1,1,0,1,1,0,1,any + intra,any + intra,rf-1007 + rf-1004 + rf-1003,inter cc,any,any,nsa,any,
+70,1,0,0,1,0,2,1,b8 + b8,,any,any,any,,any,,any
+71,1,0,0,1,0,0,0,any,,any + any,any,non ca,,emtc,,any
+72,1,0,0,2,0,0,0,any + intra,,any + any,any,any,any,any,,any
+73,1,1,1,1,1,0,1,b28,any + intra,any + any,any,any,,any,any,any
+74,1,0,0,2,0,0,0,b5 + b5,,rf-1001 + rf-1005,any,intra DU,handover,emtc,,
+75,1,0,0,1,0,0,0,b7,,rf-1003,intra cc,inter CU,any,emtc,,any
+76,1,1,0,1,1,0,0,b8 + b2,any + inter,any + any + any,any,any,handover,any,any,
+77,1,1,0,1,2,0,1,b8,n1 + n77,any + any,any,inter DU,any,nsa,any,
+78,1,1,0,1,1,0,0,any + intra,n28,rf-1005,any,non ca,,any,any,any
+79,1,0,0,1,1,0,0,b28,,any + any,intra cc,non ca,peak 4 path,any,,any
+80,1,1,0,1,1,0,0,b1 + b1,n28 + n28,rf-1004 + rf-1007 + rf-1006,any,inter DU,any,emtc,any,
+81,1,0,0,1,0,1,0,any + intra,,rf-1003,,inter DU,handover,any,,
+82,1,0,0,1,0,0,0,b20,,rf-1003,any,non ca,cell edge,volte,,
+83,1,0,0,2,1,0,0,b1,,any + any,any,non ca,any,volte,,s23+
+84,1,0,0,1,0,0,0,any,,any + any,,inter DU,handover,any,,any
+85,1,1,0,2,2,0,1,b2 + b2,n78,rf-1007 + rf-1004,inter cc,inter CU,mobility,any,nsa,any
+86,1,0,0,1,0,0,0,b28,,rf-1003 + rf-1004,any,inter DU,null,volte,,any
+87,1,0,0,1,0,0,0,b7,,any,any,non ca,any,any,,
+88,1,0,0,2,0,0,0,any,,rf-1002 + rf-1006,inter cc,inter DU,any,any,,
+89,1,1,0,1,1,0,0,b5 + b5,any,any,any,inter DU,any,any,nsa,
+90,0,0,1,0,1,0,1,b28 + b3,n28,rf-1006 + rf-1000,,non ca,handover,,any,any
+91,0,0,1,0,1,0,1,any,n7,rf-1006,,any,any,,any,any
+92,1,1,0,1,1,0,0,any,any,any,intra cc,any,any,emtc,any,
+93,1,0,0,1,1,0,0,any,,any,any,non ca,mobility,emtc,,
+94,1,0,0,1,0,0,0,any,,any + any + any,any,any,,volte,,
+95,0,0,1,0,1,0,2,any,n41 + n41,any,inter cc,inter CU,cell edge,,nr,
+96,1,0,0,1,0,0,0,b2 + b2,,rf-1004 + rf-1007 + rf-1002 + rf-1005,intra cc,any,any,emtc,,
+97,1,0,0,1,0,0,0,any,,rf-1002 + rf-1001,any,intra DU,any,volte,,
+98,1,1,1,1,1,0,1,any,n5,any + any + any,intra cc,non ca,mobility,any,any,
+99,1,1,1,1,1,0,1,b1,any,rf-1003,any,any,null,volte,any,
+100,1,1,0,1,1,0,0,any + intra,n77 + n78,rf-1007 + rf-1001,intra cc,any,peak 4 path,any,any,
+101,1,0,0,1,0,0,0,any,,any,any,intra DU,any,any,,
+102,1,1,1,1,1,0,1,b8,any,any,inter cc,inter DU,handover,nsa,nsa,any
+103,1,0,0,2,0,0,0,b5 + b5,,any,intra cc,inter CU,peak 4 path,any,,s23+
+104,1,0,0,1,0,0,2,b7 + b28,,rf-1005,any,any,any,volte,,any
+105,0,0,1,0,2,0,1,b2,n78,any + any,any,intra DU,cell edge,,any,any
+106,1,1,0,1,2,0,0,any + inter,any,any + any,inter cc,any,any,nsa,nsa,
+107,0,0,1,0,1,0,1,b28,any + intra,rf-1000,any,any,any,,nr,any
+108,1,1,0,2,2,0,0,any + inter,any,rf-1002 + rf-1004,intra cc,intra DU,any,any,any,any
+109,1,0,0,1,1,0,0,b28 + b3,,any,,intra DU,any,volte,,any
+110,1,0,0,2,0,0,0,any,,rf-1004 + rf-1001 + rf-1000 + rf-1007,any,intra DU,any,emtc,,s21
+111,1,0,0,3,0,0,0,any + intra,,any,intra cc,inter CU,peak 4 path,any,,
+112,1,0,0,1,0,0,0,b2,,any,any,any,any,emtc,,
+113,1,0,0,1,0,1,1,any + intra,,any,,any,any,any,,
+114,1,0,0,1,1,0,0,any + intra,,rf-1007,any,intra DU,any,any,,any
+115,1,1,0,2,3,0,0,any,any,rf-1006 + rf-1001,intra cc,inter DU,any,any,nsa,
+116,1,1,1,3,2,0,1,any + intra,any,rf-1001 + rf-1003 + rf-1000,,intra DU,any,any,nr,
+117,0,0,1,0,1,0,2,b5,any,any + any,,any,cell edge,,any,6cc
+118,1,0,0,1,0,2,0,any + inter,,rf-1000 + rf-1005,any,intra DU,any,volte,,s21
+119,0,0,1,0,1,0,1,any,n1,rf-1000 + rf-1002 + rf-1004,any,non ca,peak 4 path,,nr,
+120,1,0,0,1,0,0,0,any + inter,,any,any,intra DU,any,volte,,
+121,1,0,0,1,0,0,0,b3,,any + any,any,inter CU,any,any,,
+122,1,0,0,1,1,0,0,any + inter,,any + any,any,any,null,volte,,any
+123,1,1,1,1,2,0,1,any + intra,any + intra,rf-1001 + rf-1007,inter cc,inter CU,handover,any,any,
+124,1,1,0,1,1,0,0,b2 + b2,any,any,,any,any,any,any,
+125,1,0,0,1,0,0,0,any,,rf-1004 + rf-1007 + rf-1003,any,any,peak 4 path,volte,,
+126,0,0,1,0,3,1,1,any + intra,n77 + n77,rf-1006 + rf-1005 + rf-1004 + rf-1007,any,intra DU,any,,any,any
+127,1,0,0,1,0,0,0,any + intra,,rf-1000,any,inter DU,mobility,emtc,,s23+
+128,0,0,1,0,1,0,1,b1 + b7,any,any + any + any,inter cc,inter CU,any,,nr,any
+129,1,1,0,1,1,0,0,any,any,rf-1001,inter cc,inter CU,any,any,nsa,s21
+130,1,0,0,2,0,0,0,any,,any + any,,any,,any,,
+131,1,1,1,1,1,0,1,b8,any,rf-1003,any,inter CU,any,nsa,nsa,s23+
+132,1,1,1,1,1,1,2,any,n78 + n78,rf-1002 + rf-1001,inter cc,any,any,nsa,nsa,any
+133,1,1,1,1,1,0,1,any + inter,n77 + n28,rf-1000,,any,any,any,any,
+134,1,1,0,1,3,0,0,b7,n3,any + any + any + any,any,any,any,any,any,any
+135,1,0,0,1,1,0,2,b28 + b20,,any + any + any + any,any,inter CU,mobility,any,,
+136,1,1,1,3,1,0,1,b8 + b8,any + intra,rf-1005 + rf-1006,inter cc,any,peak 4 path,any,any,
+137,1,1,1,1,1,0,2,any,n7 + n7,rf-1002,any,any,any,nsa,any,
+138,1,1,0,1,1,0,0,b5 + b5,n78 + n78,any,any,any,null,nsa,any,any
+139,1,1,0,1,1,0,0,b7 + b7,n28 + n28,any,any,inter CU,any,nsa,any,s21
+140,1,0,0,2,0,0,0,any,,rf-1000 + rf-1003,,inter CU,any,any,,
+141,1,1,0,1,1,0,0,any,any,any,intra cc,inter CU,any,nsa,any,any
+142,1,0,0,1,0,0,0,any,,rf-1007,,non ca,any,emtc,,any
+143,1,1,0,1,1,0,0,any + intra,n5 + n3,any,any,inter CU,,any,nsa,any
+144,1,0,0,1,0,0,0,b20,,any,any,any,peak 4 path,any,,6cc
+145,1,1,0,1,1,0,0,b8,any,any + any,intra cc,intra DU,any,volte,any,any
+146,1,1,0,1,3,0,0,any,any,any + any + any,any,non ca,peak 4 path,any,nsa,
+147,1,0,0,1,0,0,0,any,,any + any + any,any,any,cell edge,emtc,,
+148,1,1,1,2,1,0,1,any,any + intra,rf-1005 + rf-1000,any,any,mobility,any,any,s21
+149,1,0,0,1,0,0,0,any,,any,any,intra DU,any,volte,,any
+150,1,1,0,2,1,0,0,b28 + b28,any,any,intra cc,any,any,any,nr,
+151,1,1,0,1,1,0,1,any,n7 + n7,rf-1003,any,non ca,any,any,any,s21
+152,1,1,0,1,1,0,0,any,any,rf-1007 + rf-1006,any,any,null,any,nr,
+153,1,1,1,1,2,0,1,any + inter,any,any,inter cc,any,any,any,nsa,
+154,1,0,0,2,0,0,0,any + inter,,any + any,any,intra DU,any,any,,s23+
+155,1,1,0,2,1,0,0,any + inter,any,any,any,inter CU,peak 4 path,any,nsa,any
+156,1,1,0,1,3,0,0,any,any,rf-1006,inter cc,any,null,emtc,nr,s23+
+157,1,0,0,2,1,0,0,b20,,any + any,any,non ca,cell edge,any,,6cc
+158,1,0,0,3,1,0,0,b2 + b5,,rf-1000,any,inter CU,peak 4 path,volte,,any
+159,1,0,0,1,0,1,0,any + inter,,rf-1007,inter cc,inter DU,,any,,
+160,0,0,1,0,1,0,1,b3 + b7,n77,any,inter cc,intra DU,peak 4 path,,nr,s21
+161,1,1,0,2,1,0,0,any,any,rf-1001,inter cc,non ca,any,any,any,
+162,1,0,0,2,0,0,0,b3 + b28,,any + any,inter cc,inter DU,,volte,,any
+163,1,1,1,2,1,1,1,b28 + b28,any + inter,any,,non ca,any,any,any,6cc
+164,0,0,1,0,1,0,1,any,any + intra,rf-1000,any,inter DU,cell edge,,nr,
+165,1,1,1,2,1,0,1,b5,any,rf-1002,any,any,peak 4 path,any,nr,
+166,1,0,0,1,1,0,0,b3,,any,intra cc,any,any,any,,
+167,0,0,1,0,3,0,1,any,n7,rf-1003,any,inter DU,mobility,,any,
+168,1,0,0,1,0,0,1,any,,rf-1005 + rf-1004 + rf-1000,intra cc,any,any,volte,,any
+169,1,0,0,3,0,2,0,any,,any,any,any,mobility,any,,any
+170,1,1,0,2,2,0,0,b7,any,rf-1004,any,any,mobility,nsa,nsa,any
+171,1,0,0,1,0,0,0,b3 + b3,,any,inter cc,inter CU,cell edge,any,,
+172,1,0,0,1,0,0,1,any,,rf-1005,any,any,any,emtc,,
+173,1,1,0,1,1,1,0,b20,any,any,any,non ca,any,any,nsa,any
+174,1,1,0,1,1,0,1,any + inter,any + inter,rf-1003,intra cc,inter CU,mobility,nsa,any,6cc
+175,1,0,0,1,1,0,1,any,,rf-1007,any,any,any,any,,any
+176,1,0,0,1,0,0,0,any + inter,,any,inter cc,inter CU,null,any,,any
+177,1,0,0,2,0,0,0,b1,,rf-1006 + rf-1005 + rf-1003,any,any,handover,volte,,
+178,1,1,0,1,2,0,0,any + inter,any + inter,any,inter cc,intra DU,,any,nr,
+179,1,0,0,1,0,0,0,any,,any,any,any,any,emtc,,
+180,1,0,0,1,0,2,0,b7 + b7,,any,any,intra DU,any,any,,any
+181,1,0,0,1,0,0,0,b20 + b28,,any + any,any,inter CU,null,any,,
+182,1,1,0,1,1,0,1,any,any + intra,any,any,inter CU,any,nsa,nsa,s23+
+183,1,0,0,1,0,0,2,b28 + b28,,rf-1000 + rf-1004,any,any,any,emtc,,
+184,1,0,0,1,0,0,0,b2,,any + any + any,any,intra DU,any,any,,any
+185,1,0,0,1,0,0,0,any + intra,,any,,intra DU,,emtc,,6cc
+186,0,0,1,0,1,0,1,any + intra,n5,rf-1006 + rf-1005,any,any,cell edge,,any,s21
+187,1,0,0,2,0,0,0,b8 + b8,,any,inter cc,any,any,emtc,,any
+188,1,1,1,1,1,0,2,b1 + b5,any + inter,any,any,any,any,nsa,nsa,
+189,0,0,1,0,2,0,1,,n41 + n28,any,inter cc,any,handover,,any,any
+190,1,0,0,1,0,0,0,b28,,any,intra cc,non ca,any,emtc,,6cc
+191,1,1,0,1,1,0,0,b7 + b7,n7 + n77,any,inter cc,non ca,,any,any,any
+192,1,1,0,2,1,0,1,b28 + b28,n77,rf-1001 + rf-1006,any,any,any,any,nsa,s23+
+193,1,1,0,1,1,1,0,any,n1,rf-1002,intra cc,non ca,any,any,any,
+194,1,1,1,3,1,0,1,b1 + b5,any + inter,rf-1003,intra cc,non ca,any,emtc,any,s23+
+195,1,0,0,1,0,0,0,b3,,any,intra cc,any,any,emtc,,s23+
+196,1,1,1,1,2,0,1,b20 + b3,n77 + n78,rf-1005,any,any,,nsa,any,6cc
+197,1,0,0,1,0,0,0,any + inter,,any,any,inter CU,any,any,,
+198,1,1,1,1,1,0,1,any + intra,n77,any + any,,inter DU,null,any,nr,
+199,1,1,0,1,1,0,0,any + intra,n7,any,intra cc,inter CU,any,nsa,any,any
+200,1,0,0,2,0,0,0,any + intra,,any,intra cc,non ca,null,any,,s23+
+201,1,1,1,1,1,0,3,any,n7,any,intra cc,intra DU,any,any,nr,s21
+202,1,0,0,2,0,0,0,any,,rf-1000,any,non ca,handover,any,,
+203,1,0,0,2,0,0,0,b8 + b7,,rf-1007,any,inter DU,null,any,,6cc
+204,0,0,1,0,1,1,2,any,any,rf-1003,any,any,any,,any,s23+
+205,1,0,0,1,0,1,0,b5 + b8,,any + any,,inter CU,any,any,,
+206,1,0,0,2,0,0,0,b7,,any,intra cc,non ca,any,any,,s23+
+207,1,1,0,3,2,1,0,any + intra,any,rf-1000 + rf-1004,inter cc,inter CU,peak 4 path,nsa,nsa,
+208,1,0,0,2,0,0,0,b7,,rf-1007,inter cc,inter DU,any,volte,,6cc
+209,1,1,0,1,1,0,0,any,n77 + n77,rf-1006,any,any,any,volte,nr,
+210,1,1,1,1,2,0,1,b20 + b20,n3,any + any + any + any,any,any,peak 4 path,any,nsa,any
+211,1,1,1,1,1,0,1,b7 + b7,any,any + any,inter cc,any,cell edge,nsa,nsa,
+212,1,0,0,1,1,0,0,b20,,rf-1000 + rf-1006,intra cc,any,handover,any,,
+213,1,0,0,1,0,0,0,any,,any,any,non ca,any,any,,any
+214,1,1,0,1,1,0,0,any + intra,any + inter,rf-1003,,inter DU,mobility,emtc,nr,any
+215,0,0,1,0,1,0,1,any + inter,n5 + n77,rf-1002 + rf-1000 + rf-1001,any,intra DU,any,,any,s21
+216,0,0,1,0,1,0,1,b20 + b20,n77 + n7,any,,any,peak 4 path,,nr,
+217,1,1,1,1,2,0,1,b8 + b2,n77,rf-1001 + rf-1000 + rf-1006,,intra DU,,volte,any,any
+218,1,0,0,1,0,1,0,any,,any,inter cc,non ca,,volte,,any
+219,1,0,0,2,0,0,0,any + inter,,any + any,any,any,any,any,,
+220,1,0,0,1,0,0,0,any + inter,,any + any,any,any,any,emtc,,
+221,1,0,0,2,0,0,0,b8,,rf-1004 + rf-1006,any,any,any,any,,any
+222,1,0,0,1,2,1,0,any + inter,,any + any + any,intra cc,any,peak 4 path,any,,any
+223,1,1,1,1,1,1,1,b20,n41,any + any,any,any,any,nsa,nsa,any
+224,1,1,1,1,2,0,3,b8 + b1,any + inter,any,inter cc,any,cell edge,nsa,any,
+225,1,0,0,2,0,0,1,b5 + b5,,rf-1004,intra cc,intra DU,null,emtc,,
+226,1,0,0,1,1,0,1,b28 + b28,,rf-1001 + rf-1007,,any,any,emtc,,any
+227,1,1,0,1,1,0,0,b7 + b7,n41 + n41,rf-1001,any,non ca,handover,nsa,nsa,
+228,1,1,0,1,1,0,0,any + intra,any,any,inter cc,any,any,nsa,any,
+229,1,0,0,1,0,0,0,b3,,rf-1002,any,any,cell edge,emtc,,any
+230,1,1,0,1,1,0,0,b7 + b7,any + intra,any,any,any,any,any,nr,any
+231,1,0,0,1,0,0,0,any + inter,,rf-1006,inter cc,any,,any,,s21
+232,1,1,0,2,2,1,0,any,n5,rf-1001,any,inter DU,null,nsa,nsa,
+233,1,1,0,1,2,1,0,any,n28 + n28,rf-1007,intra cc,inter CU,any,any,any,
+234,1,0,0,1,0,0,2,any + intra,,rf-1005 + rf-1001,inter cc,any,any,volte,,
+235,1,1,1,1,1,0,1,any + intra,any,rf-1001,any,inter DU,any,any,any,
+236,1,1,1,1,1,1,1,any + inter,any,any,any,inter DU,any,nsa,nsa,s23+
+237,1,0,0,1,0,1,1,any + inter,,any,any,non ca,null,any,,
+238,1,0,0,1,0,0,0,any + intra,,any,intra cc,inter CU,mobility,any,,
+239,1,0,0,1,0,0,0,b1,,any + any,any,inter CU,any,volte,,
+240,1,1,0,2,1,0,1,b3 + b3,n28,rf-1007 + rf-1002,any,any,null,any,any,
+241,1,1,0,1,1,0,1,b1,n3,rf-1001,inter cc,inter CU,,emtc,nr,6cc
+242,1,1,0,2,1,0,0,any,any + inter,any,,intra DU,,volte,nr,any
+243,1,0,0,1,0,0,0,any + inter,,any,any,inter CU,peak 4 path,any,,any
+244,1,0,0,1,0,0,1,any,,rf-1003 + rf-1000 + rf-1001,any,inter DU,any,emtc,,
+245,1,1,0,1,1,0,2,b20 + b20,any + intra,rf-1005 + rf-1002,inter cc,non ca,cell edge,volte,nr,s23+
+246,1,1,0,1,1,1,0,any,any,any + any + any,any,any,,any,nr,
+247,1,0,0,1,0,0,0,b7 + b20,,any,any,any,any,any,,s23+
+248,1,0,0,3,0,0,1,b20 + b8,,rf-1005,,any,handover,any,,
+249,1,0,0,1,0,0,0,b7,,rf-1000,any,non ca,peak 4 path,volte,,6cc
+250,1,0,0,1,0,0,0,any,,any,intra cc,intra DU,handover,emtc,,any
+251,1,1,0,1,1,1,0,b7,n3 + n3,rf-1005,,any,any,nsa,any,
+252,1,0,0,1,1,1,0,b8 + b7,,any,any,inter DU,any,emtc,,
+253,1,0,0,1,0,0,1,any,,any,intra cc,inter DU,null,any,,any
+254,1,0,0,1,2,0,0,any,,rf-1004,any,inter CU,,any,,6cc
+255,1,0,0,2,0,0,0,any + inter,,rf-1000,intra cc,any,null,volte,,any
+256,1,0,0,1,0,0,0,b28,,rf-1003 + rf-1006,intra cc,any,any,any,,
+257,1,0,0,1,0,0,2,any + intra,,rf-1000,any,any,handover,emtc,,any
+258,1,1,0,1,3,1,0,any,n28 + n1,rf-1006,any,non ca,any,emtc,any,s21
+259,0,0,1,0,1,0,2,b8 + b8,n7 + n7,any,any,non ca,any,,any,any
+260,1,1,0,3,1,0,0,b8 + b8,any + inter,rf-1005 + rf-1006,any,any,mobility,nsa,nsa,
+261,1,1,0,1,1,0,0,b1 + b1,n41 + n7,rf-1007,intra cc,non ca,any,nsa,any,any
+262,0,0,1,0,1,0,1,any + inter,any + inter,any,any,inter CU,any,,any,any
+263,1,0,0,1,0,0,0,b5,,any,any,inter DU,any,volte,,any
+264,1,1,1,1,3,0,1,any,any,any,any,any,,any,nr,any
+265,1,0,0,1,0,0,0,b2 + b7,,rf-1005,any,intra DU,cell edge,emtc,,
+266,1,0,0,1,0,2,0,any,,rf-1001,any,inter DU,,volte,,
+267,1,1,1,2,1,0,1,any + intra,any,rf-1002 + rf-1003,any,any,mobility,any,any,any
+268,1,0,0,1,0,0,0,b8 + b28,,rf-1001,any,intra DU,peak 4 path,any,,any
+269,1,1,0,1,1,0,0,any + inter,any + inter,any + any + any,intra cc,any,any,any,nr,any
+270,1,1,1,3,1,0,2,any,any + inter,any + any,,any,null,any,any,any
+271,1,0,0,1,0,0,0,b3,,rf-1002 + rf-1003,,intra DU,peak 4 path,any,,
+272,1,0,0,1,1,0,0,any,,rf-1006,inter cc,intra DU,any,emtc,,
+273,1,1,0,1,1,0,0,b20 + b7,any,any,,any,handover,any,nr,any
+274,0,0,1,0,1,0,2,b8 + b3,n7 + n3,rf-1001,any,any,any,,nr,s21
+275,1,1,1,1,1,0,1,any,any,rf-1004 + rf-1007,intra cc,any,any,any,any,
+276,0,0,1,1,1,0,1,b3,any,rf-1007 + rf-1006 + rf-1003,any,any,any,,any,
+277,1,0,0,1,0,0,0,b5 + b1,,rf-1006,intra cc,intra DU,any,emtc,,
+278,1,1,0,1,1,0,1,any,any + intra,rf-1007,inter cc,any,any,emtc,any,6cc
+279,1,0,0,1,0,0,0,any + intra,,any,any,any,null,any,,
+280,1,0,0,1,0,0,0,b1 + b1,,any + any + any,any,any,mobility,emtc,,s23+
+281,1,0,0,1,1,0,0,b5,,rf-1001,intra cc,inter CU,null,volte,,any
+282,1,1,0,2,1,0,0,b5,n41 + n41,any + any,,inter DU,any,any,any,s23+
+283,1,0,0,2,0,1,0,b28,,rf-1006 + rf-1001,any,any,any,emtc,,
+284,1,0,0,2,0,0,1,any,,rf-1002,any,inter DU,any,any,,
+285,1,0,0,1,0,0,0,any,,any,inter cc,any,cell edge,emtc,,
+286,1,0,0,1,0,0,0,any,,any,,intra DU,cell edge,any,,any
+287,1,1,0,1,1,0,0,b20 + b20,n28 + n78,rf-1005,,any,any,nsa,nsa,any
+288,1,1,1,1,2,0,1,b7,any + intra,rf-1002 + rf-1006 + rf-1000,inter cc,intra DU,any,nsa,nsa,
+289,1,1,0,2,2,0,0,b5 + b5,n5 + n1,any + any + any + any,any,any,any,nsa,any,any
+290,1,1,0,1,1,0,0,b20,n41,rf-1007 + rf-1001,inter cc,any,handover,emtc,any,
+291,1,1,0,1,1,0,0,any,n5,any,any,any,,any,any,
+292,1,1,0,1,2,0,0,b7,any,any,any,intra DU,cell edge,any,nsa,
+293,1,0,0,2,0,0,0,b1,,any + any + any,inter cc,non ca,handover,any,,
+294,1,1,0,1,2,0,0,any,any,any,inter cc,inter CU,handover,volte,any,s21
+295,1,0,0,2,0,1,0,any,,any + any + any,intra cc,non ca,any,emtc,,any
+296,1,0,0,1,0,0,1,b3 + b3,,rf-1000 + rf-1002,any,intra DU,any,any,,
+297,0,0,1,1,1,0,1,any + intra,n3 + n7,rf-1000 + rf-1002,any,any,any,,any,
+298,1,0,0,1,0,0,0,any + inter,,rf-1002 + rf-1004,,non ca,handover,emtc,,6cc
+299,1,0,0,3,0,0,0,any,,rf-1001,intra cc,any,null,any,,any
+300,1,0,0,1,0,0,0,any,,rf-1006 + rf-1005,any,any,any,volte,,s21
+301,1,0,0,1,0,0,0,any + inter,,rf-1007,intra cc,any,null,any,,
+302,0,0,1,0,1,0,2,b1 + b1,any,rf-1002,,intra DU,cell edge,,any,
+303,1,0,0,2,0,2,0,b28,,rf-1003 + rf-1000,any,any,,any,,any
+304,1,1,1,3,1,0,1,b1 + b1,any + inter,any,any,non ca,any,emtc,any,s23+
+305,1,0,0,1,0,0,0,b8,,any,intra cc,intra DU,any,emtc,,
+306,1,0,0,1,1,1,0,b28,,any,inter cc,inter CU,any,any,,
+307,1,1,1,1,2,0,1,b5,n3 + n3,any + any,intra cc,inter DU,any,any,nsa,
+308,1,0,0,1,0,0,1,b28 + b28,,rf-1000,any,any,peak 4 path,any,,6cc
+309,1,0,0,1,0,0,0,any + intra,,rf-1007 + rf-1000,any,intra DU,mobility,any,,
+310,1,1,0,1,1,0,0,b3,any,rf-1004,any,any,any,nsa,any,any
+311,1,1,0,1,1,1,0,any + inter,n28,rf-1002 + rf-1000 + rf-1003 + rf-1007,any,intra DU,any,any,nsa,
+312,1,0,0,3,0,0,0,any + inter,,rf-1005 + rf-1002 + rf-1006,any,inter DU,cell edge,volte,,
+313,1,0,0,1,0,1,0,b1 + b1,,any + any,,any,any,any,,any
+314,1,0,0,1,0,0,0,any + intra,,rf-1004,,any,any,any,,any
+315,1,0,0,1,0,0,0,b1,,rf-1000 + rf-1006,intra cc,inter CU,any,any,,6cc
+316,1,0,0,2,0,0,0,any,,any + any + any,any,any,any,any,,
+317,1,0,0,1,1,0,0,b5,,any + any,any,any,cell edge,emtc,,
+318,1,1,0,1,1,0,0,any + inter,n7 + n5,any + any,intra cc,any,any,nsa,nsa,any
+319,1,0,0,1,2,0,0,any,,any + any,any,inter CU,any,volte,,
+320,1,1,0,2,1,0,0,b1 + b1,any + inter,any + any + any,inter cc,any,mobility,emtc,nr,
+321,0,0,1,0,1,0,1,any,n78 + n7,rf-1003,any,inter DU,cell edge,,nr,any
+322,0,0,1,1,1,0,1,b20 + b20,n78 + n3,any,inter cc,non ca,any,,nr,s21
+323,1,1,0,2,1,0,0,b1,any,rf-1004,any,any,any,nsa,nsa,s23+
+324,1,0,0,1,0,0,0,any + inter,,any + any + any + any,any,any,handover,volte,,
+325,1,0,0,2,1,0,1,b3,,rf-1003,any,inter CU,any,any,,any
+326,1,1,0,1,1,0,0,any,any,rf-1007,any,any,any,nsa,nsa,any
+327,1,0,0,1,0,0,1,b8,,rf-1003 + rf-1004,,inter CU,any,any,,any
+328,0,0,1,0,2,0,1,any + inter,any,rf-1000 + rf-1005,inter cc,non ca,,,any,s21
+329,1,0,0,2,1,0,0,b28 + b20,,any + any,inter cc,intra DU,peak 4 path,emtc,,any
+330,1,1,0,1,1,0,0,any + inter,n1 + n41,rf-1004 + rf-1007 + rf-1000,any,any,any,any,nr,
+331,1,1,0,1,1,1,0,b5,any + intra,any,intra cc,any,any,nsa,nsa,any
+332,1,0,0,1,0,0,0,any,,any + any + any,any,inter CU,any,emtc,,any
+333,1,1,0,1,1,0,0,any,any,rf-1002 + rf-1006,intra cc,any,null,emtc,nr,any
+334,1,0,0,1,0,0,0,any,,any,any,inter CU,any,emtc,,
+335,1,0,0,1,0,0,0,any,,any,,inter CU,any,emtc,,any
+336,1,1,1,2,1,0,1,any,n78 + n41,any,intra cc,any,mobility,volte,any,s21
+337,1,1,0,3,1,0,0,b5,n1 + n1,rf-1003 + rf-1001 + rf-1005 + rf-1002,any,any,cell edge,any,nsa,
+338,1,1,1,1,1,1,2,any + inter,any,rf-1007,inter cc,non ca,peak 4 path,nsa,nsa,
+339,1,0,0,1,0,0,0,b7 + b8,,any,intra cc,intra DU,cell edge,any,,
+340,1,0,0,2,0,0,0,any + inter,,rf-1006 + rf-1003,any,intra DU,any,any,,any
+341,1,0,0,1,0,0,0,b20 + b20,,any + any,any,non ca,,any,,any
+342,1,0,0,1,0,0,1,any + intra,,rf-1003 + rf-1005 + rf-1000,,intra DU,mobility,emtc,,s21
+343,1,0,0,2,0,0,0,b1,,rf-1001 + rf-1000,any,any,mobility,any,,
+344,1,1,1,1,1,0,1,any + inter,n41,any,inter cc,any,any,any,any,
+345,1,0,0,1,0,0,0,b7 + b5,,rf-1002 + rf-1001,inter cc,intra DU,cell edge,volte,,
+346,1,1,0,1,1,0,0,b7,n3,any,any,inter DU,any,volte,any,s23+
+347,0,0,1,0,1,0,1,any,any,rf-1006 + rf-1000 + rf-1004,,any,cell edge,,nr,any
+348,1,0,0,1,0,0,1,any,,rf-1000 + rf-1002 + rf-1007,inter cc,inter CU,any,emtc,,any
+349,1,1,1,1,1,0,1,b2 + b2,n5 + n5,rf-1007,any,non ca,,nsa,any,any
+350,1,1,1,1,3,1,2,any,n1,rf-1005 + rf-1004 + rf-1002,,inter CU,peak 4 path,any,nr,
+351,1,1,0,1,1,0,1,any,n1,rf-1000 + rf-1004 + rf-1002,any,inter CU,any,any,any,s23+
+352,1,0,0,1,0,1,0,any,,any,any,any,cell edge,volte,,s23+
+353,1,0,0,2,0,0,1,any + intra,,rf-1000 + rf-1007 + rf-1001,any,any,peak 4 path,emtc,,
+354,1,1,0,1,1,0,0,b8 + b2,n3 + n7,any + any + any,any,inter CU,handover,any,any,s21
+355,1,1,1,1,1,0,1,b28 + b8,n1,any + any,any,any,mobility,any,any,
+356,1,0,0,1,0,0,0,any,,any,any,non ca,any,volte,,
+357,1,0,0,1,0,0,0,b20 + b20,,any + any,any,intra DU,null,emtc,,
+358,1,0,0,2,0,0,0,any + inter,,any,inter cc,intra DU,null,volte,,6cc
+359,1,1,0,1,2,0,0,b1 + b1,n28 + n28,rf-1004 + rf-1006,,inter CU,any,nsa,any,any
+360,0,0,1,0,1,0,1,any + intra,any + inter,any,any,inter CU,any,,any,
+361,1,1,0,1,1,0,0,b8 + b3,any,any,inter cc,any,mobility,any,any,any
+362,1,0,0,2,0,0,0,any + intra,,any + any,,any,any,any,,any
+363,0,0,1,0,1,0,2,b3,n5,rf-1006 + rf-1005,any,intra DU,null,,nr,any
+364,1,1,1,1,1,0,2,b20 + b20,n41 + n5,rf-1003,,intra DU,any,nsa,any,any
+365,1,0,0,3,0,0,1,b8 + b8,,any,,any,any,any,,
+366,1,1,0,1,1,1,0,b5 + b7,n41 + n41,rf-1004 + rf-1001,intra cc,inter DU,any,nsa,any,
+367,1,0,0,1,0,0,0,b8 + b8,,any + any,any,inter CU,mobility,any,,any
+368,1,1,0,2,1,0,0,b7 + b7,any,rf-1002,inter cc,any,,any,any,s23+
+369,1,1,0,1,1,0,0,any,any,rf-1005,any,intra DU,mobility,nsa,nsa,
+370,1,1,1,3,2,0,1,b5 + b5,any,rf-1002 + rf-1001 + rf-1006,,inter DU,mobility,emtc,nr,s21
+371,1,1,1,1,1,0,1,any,n41,any + any + any,any,any,any,any,nsa,s23+
+372,1,1,0,1,1,0,0,b1 + b20,n3 + n1,rf-1000,any,inter DU,any,any,any,
+373,1,1,0,3,1,0,0,b5 + b5,n41,rf-1007,inter cc,any,,nsa,any,
+374,1,0,0,1,1,0,0,any + inter,,rf-1002,intra cc,any,,any,,s21
+375,1,1,1,1,1,0,1,b5,any,rf-1000 + rf-1004 + rf-1002,,any,null,any,any,any
+376,1,1,1,2,2,0,1,b1 + b2,n28 + n41,rf-1001,any,inter CU,cell edge,nsa,any,
+377,1,0,0,1,0,0,0,any,,rf-1002 + rf-1005,any,any,peak 4 path,any,,
+378,1,1,0,2,1,0,0,any + inter,any + inter,any,,any,any,any,any,
+379,1,1,0,1,2,0,0,any + intra,any,any,,any,cell edge,any,nsa,
+380,1,1,0,1,1,1,0,any,n7,any,inter cc,any,handover,any,nr,6cc
+381,0,0,1,0,1,0,1,any,any + inter,rf-1001 + rf-1007,inter cc,non ca,,,nr,s21
+382,1,1,1,1,1,0,1,b2,n3 + n3,any,inter cc,inter CU,handover,nsa,any,any
+383,1,0,0,1,0,0,1,b3 + b3,,any,inter cc,non ca,null,volte,,any
+384,1,1,0,1,1,0,0,b28 + b2,n3,any + any,any,any,,nsa,any,any
+385,0,0,1,1,1,1,1,b7,any,any + any,any,inter CU,mobility,,nr,
+386,1,0,0,1,0,1,0,any,,any,,any,mobility,any,,any
+387,1,0,0,1,0,1,0,any + intra,,rf-1007 + rf-1003 + rf-1002,intra cc,non ca,,any,,
+388,1,0,0,3,1,1,1,b3 + b3,,any,inter cc,any,,any,,
+389,1,0,0,2,0,0,0,any + inter,,any,any,non ca,any,emtc,,
+390,1,0,0,1,0,0,0,b28,,rf-1007,any,any,null,any,,
+391,1,1,0,2,1,0,0,any,any,any + any + any,,inter CU,any,nsa,any,s23+
+392,1,1,1,1,1,0,2,any,n77,any,intra cc,inter DU,cell edge,nsa,nsa,s23+
+393,1,1,0,1,1,0,1,any,any + inter,rf-1003,any,any,any,any,nsa,any
+394,1,1,0,1,1,0,0,any,n7,any + any + any,any,any,any,any,nsa,
+395,1,1,0,1,1,0,0,any + intra,n77,rf-1003,any,any,null,any,nr,6cc
+396,1,0,0,1,0,1,0,b28,,any,inter cc,non ca,any,any,,
+397,1,1,0,1,1,0,0,any,n3,any,,intra DU,any,any,any,
+398,1,1,0,1,1,1,0,any + inter,any,any,any,inter CU,handover,any,any,
+399,0,0,1,0,1,0,1,any,n1,rf-1001 + rf-1003,inter cc,any,any,,any,
+400,1,1,0,2,1,0,1,any,any,any,inter cc,non ca,cell edge,any,any,any
+401,1,0,0,1,0,1,0,b5 + b1,,rf-1007,intra cc,any,any,emtc,,any
+402,1,1,1,1,1,0,1,any,any + inter,any,inter cc,intra DU,any,volte,any,
+403,1,0,0,1,1,0,0,any,,any,any,inter DU,handover,any,,
+404,0,0,1,1,1,0,1,b8 + b2,n78 + n78,any + any,any,non ca,any,,any,
+405,1,0,0,1,0,0,0,b20,,rf-1007,any,any,cell edge,volte,,s21
+406,1,0,0,2,0,1,0,any,,rf-1004,inter cc,any,any,any,,any
+407,1,1,0,1,1,0,0,any,n28 + n41,any,intra cc,intra DU,any,emtc,any,s23+
+408,0,0,1,0,1,0,1,any + intra,any,any + any + any + any,,non ca,,,nr,s23+
+409,1,1,1,2,1,0,2,any,any,any,any,inter DU,cell edge,any,nsa,
+410,1,1,0,1,1,0,0,any,n5 + n41,any,any,intra DU,peak 4 path,nsa,nsa,any
+411,1,1,1,1,1,0,2,any,any,any,inter cc,any,any,nsa,nsa,any
+412,1,0,0,1,0,0,0,any,,any,any,inter DU,any,any,,
+413,1,0,0,1,0,0,0,any,,rf-1007,inter cc,any,any,any,,
+414,1,0,0,2,0,0,0,b7,,any,,any,cell edge,volte,,6cc
+415,1,0,0,2,0,0,1,b5 + b5,,any + any,any,any,,emtc,,s21
+416,1,1,0,1,1,0,1,b8 + b8,any,any,intra cc,inter DU,null,any,any,
+417,1,0,0,1,0,0,0,b8,,rf-1005,intra cc,any,any,any,,
+418,1,0,0,1,0,0,1,any + intra,,any,any,any,any,volte,,
+419,1,0,0,1,0,0,1,b5 + b5,,any,inter cc,non ca,any,any,,any
+420,1,1,0,1,2,1,0,b5,n41 + n7,any + any,any,any,mobility,any,any,any
+421,1,0,0,1,0,0,1,b3 + b3,,rf-1003 + rf-1002,inter cc,non ca,,volte,,
+422,1,0,0,1,0,0,0,any + intra,,rf-1003,,non ca,,any,,s23+
+423,1,0,0,2,0,0,0,b20,,any + any + any + any,any,any,mobility,volte,,
+424,1,1,0,1,2,0,0,any + inter,n77 + n77,any + any,inter cc,any,mobility,nsa,nsa,
+425,1,0,0,1,0,0,0,b7,,any + any + any,intra cc,inter CU,any,any,,6cc
+426,1,1,0,3,1,0,0,any + inter,n1 + n1,rf-1000,any,non ca,handover,nsa,any,6cc
+427,0,0,1,1,1,0,1,any,any + inter,any,intra cc,intra DU,any,,any,s21
+428,1,0,0,1,0,0,0,b7 + b1,,any + any,intra cc,intra DU,null,any,,any
+429,1,1,0,1,2,0,0,b8,n3 + n5,any + any,intra cc,any,any,nsa,any,
+430,1,0,0,1,0,0,0,any + inter,,any + any + any,any,inter DU,any,any,,
+431,1,0,0,2,0,0,0,b2 + b2,,rf-1004 + rf-1003,intra cc,any,any,any,,any
+432,0,0,1,1,1,0,3,b1 + b1,any,rf-1000,any,any,any,,any,6cc
+433,1,1,0,2,1,0,0,any,n3 + n3,any + any,inter cc,any,handover,any,nsa,
+434,0,0,1,0,1,0,1,b2 + b3,n77,rf-1004 + rf-1005,,any,any,,any,
+435,1,0,0,2,0,0,0,any,,any,,any,any,any,,any
+436,1,0,0,1,0,0,0,b8 + b8,,rf-1007 + rf-1003,any,inter DU,any,any,,any
+437,1,1,0,1,3,1,0,any + intra,any + inter,any + any,inter cc,inter DU,null,any,any,
+438,1,1,1,1,1,0,1,b5 + b5,n78,rf-1005,inter cc,non ca,cell edge,volte,any,s23+
+439,1,1,1,2,1,0,1,b3 + b2,n7,rf-1006,any,any,any,any,nsa,any
+440,1,0,0,1,0,0,0,b2,,rf-1002,inter cc,any,cell edge,any,,
+441,1,0,0,3,0,0,0,any + inter,,any + any,any,any,cell edge,volte,,
+442,1,0,0,1,0,1,0,any,,any + any,any,any,any,any,,
+443,1,0,0,1,0,0,0,any,,rf-1006,any,inter DU,any,any,,
+444,1,0,0,1,0,0,0,any,,any,,any,any,volte,,any
+445,1,0,0,1,0,0,0,b8 + b5,,any,any,any,any,emtc,,
+446,1,1,0,1,1,0,0,any,any,any + any,any,intra DU,mobility,any,nr,
+447,1,0,0,1,0,1,1,b20 + b2,,rf-1006 + rf-1004 + rf-1005,inter cc,intra DU,any,emtc,,6cc
+448,1,1,0,2,1,0,0,any,n5 + n7,rf-1006,,non ca,any,emtc,nr,
+449,1,0,0,1,0,0,0,any + inter,,rf-1006 + rf-1001,,any,mobility,any,,any
+450,1,0,0,1,1,0,0,any + intra,,rf-1006,inter cc,inter DU,any,volte,,6cc
+451,1,0,0,2,0,0,0,b20 + b20,,any + any,inter cc,inter DU,any,emtc,,any
+452,0,0,1,1,1,0,1,any,any + inter,any + any,any,any,cell edge,,any,
+453,1,0,0,1,0,0,0,b2 + b3,,rf-1006 + rf-1002,intra cc,any,peak 4 path,any,,
+454,1,1,0,1,1,0,1,any,n28 + n3,any,any,inter CU,,any,any,any
+455,1,1,1,1,1,0,1,b1,any + inter,any + any + any,any,non ca,mobility,any,nr,any
+456,1,1,0,1,1,0,0,any,any + inter,any,intra cc,any,any,any,nsa,
+457,1,1,0,1,1,0,0,b20,n3 + n78,any + any + any,intra cc,any,mobility,any,any,any
+458,1,1,0,1,2,0,0,b3 + b20,any,any + any,,inter DU,any,any,nsa,s21
+459,1,0,0,3,1,0,0,any + intra,,rf-1002,,any,any,emtc,,
+460,1,0,0,2,0,0,1,any,,rf-1003 + rf-1001,any,inter CU,any,any,,
+461,0,0,1,0,1,0,1,b1 + b28,any,any + any,,any,mobility,,nr,any
+462,0,0,1,1,1,0,1,any,any,any,,intra DU,any,,nr,any
+463,1,0,0,1,0,0,1,any,,rf-1007 + rf-1002,intra cc,any,handover,any,,any
+464,1,1,1,1,1,0,2,b2,n3,any,,any,any,any,nsa,
+465,1,1,0,1,2,0,0,any + intra,n41,any + any,any,any,cell edge,emtc,nr,any
+466,1,1,0,1,1,0,0,b5,any + intra,any,intra cc,any,any,volte,any,
+467,1,0,0,1,1,1,0,any,,rf-1001,any,non ca,peak 4 path,any,,s23+
+468,1,1,0,1,1,0,0,any + inter,any + inter,rf-1004 + rf-1002,any,any,cell edge,any,any,6cc
+469,1,1,0,1,2,0,0,any,any,rf-1004 + rf-1003,any,any,,any,any,
+470,1,1,1,1,1,0,1,any + inter,n3,any + any,intra cc,any,any,any,nsa,any
+471,1,0,0,1,0,0,0,any,,any,intra cc,any,any,any,,any
+472,1,1,0,1,1,0,0,b7 + b1,any + inter,any,any,inter DU,any,any,nr,
+473,1,0,0,1,0,0,0,any,,any + any + any,intra cc,any,any,any,,any
+474,0,0,1,1,1,1,1,b5,any,rf-1001,any,any,null,,nr,
+475,1,0,0,2,0,0,0,any + inter,,any,inter cc,non ca,handover,volte,,6cc
+476,1,1,1,1,2,0,2,any,any + inter,any,inter cc,intra DU,handover,nsa,any,
+477,1,1,0,1,3,0,0,any + intra,n41,any + any + any,inter cc,inter DU,any,any,any,
+478,1,0,0,1,0,0,0,b28,,any,any,intra DU,any,any,,
+479,1,1,0,1,1,0,0,any,any,rf-1003,any,any,peak 4 path,volte,any,s23+
+480,0,0,1,1,1,1,1,b8 + b8,any,any + any,,any,handover,,any,s23+
+481,1,0,0,1,0,2,0,b5 + b5,,rf-1007,intra cc,any,peak 4 path,emtc,,
+482,1,0,0,1,0,0,0,b2 + b2,,rf-1006,any,any,mobility,emtc,,
+483,1,1,0,2,1,0,0,any + intra,any + inter,any,inter cc,any,any,any,any,
+484,0,0,1,0,1,1,1,any + intra,n7 + n7,rf-1002,,any,,,nr,6cc
+485,1,0,0,1,0,0,0,any,,rf-1003 + rf-1001,any,any,,any,,any
+486,1,0,0,2,0,1,0,b1 + b7,,any,any,any,any,any,,6cc
+487,1,1,0,1,1,0,0,any + inter,n7 + n7,rf-1004 + rf-1000 + rf-1001,,any,any,any,any,any
+488,1,0,0,1,1,0,0,b2,,any,intra cc,any,handover,any,,
+489,1,0,0,1,0,0,0,any + inter,,rf-1000 + rf-1003,any,any,handover,any,,
+490,1,0,0,1,0,0,0,b28 + b28,,rf-1002,any,non ca,any,any,,any
+491,1,0,0,2,1,0,1,any,,rf-1004,,intra DU,any,volte,,6cc
+492,1,0,0,1,0,0,1,any,,any + any,inter cc,any,,emtc,,
+493,1,1,0,1,2,0,0,b20 + b1,n1 + n77,any + any,any,inter CU,any,nsa,any,
+494,1,1,1,1,2,0,1,any,any + intra,rf-1005,any,intra DU,,emtc,any,
+495,1,0,0,1,0,0,0,any,,any,inter cc,any,any,volte,,
+496,1,1,1,1,1,0,1,b3,n7 + n7,any,any,inter CU,null,nsa,any,s21
+497,1,0,0,1,0,0,0,b3,,any,any,inter DU,any,any,,any
+498,1,0,0,1,0,0,0,b5 + b3,,any + any,,any,handover,volte,,any
+499,1,0,0,1,0,0,0,any + inter,,any + any,,intra DU,any,volte,,
+500,1,1,0,2,1,0,0,b3,n5,rf-1004 + rf-1005,any,intra DU,mobility,any,nsa,
+501,1,1,0,1,1,0,1,any + intra,n3 + n3,any + any + any,,intra DU,any,volte,any,
+502,0,0,1,0,1,1,1,any + intra,any + inter,rf-1005 + rf-1002 + rf-1001 + rf-1000,inter cc,any,null,,nr,
+503,1,0,0,1,2,0,0,any,,any,any,intra DU,cell edge,any,,
+504,1,0,0,1,0,0,0,any,,any + any,any,any,mobility,any,,
+505,0,0,1,0,1,0,3,b28 + b3,n77,any,intra cc,inter CU,any,,any,
+506,1,0,0,2,0,1,0,any,,rf-1005,any,any,cell edge,any,,any
+507,1,0,0,1,0,0,0,b7 + b1,,rf-1000,,any,any,any,,
+508,1,0,0,2,2,0,0,any + intra,,rf-1000 + rf-1006,inter cc,any,any,any,,s23+
+509,0,0,1,1,1,0,1,any,any + inter,any,inter cc,any,mobility,,any,any
+510,1,0,0,1,0,0,0,b28,,rf-1000,inter cc,any,any,emtc,,
+511,0,0,1,0,1,0,2,b1 + b20,any,any + any,intra cc,any,any,,any,
+512,1,1,0,2,1,0,0,any,n5 + n28,any,any,any,any,volte,nr,any
+513,1,0,0,1,0,0,0,any + intra,,rf-1006,any,any,any,emtc,,6cc
+514,1,0,0,2,0,0,0,any,,rf-1000 + rf-1007 + rf-1002,any,inter CU,any,volte,,
+515,1,1,0,1,1,0,0,any + inter,n1 + n1,rf-1005,any,non ca,,any,any,6cc
+516,1,0,0,1,0,0,0,b2 + b2,,any + any + any,any,any,null,emtc,,s23+
+517,1,0,0,1,0,0,0,any + intra,,rf-1000 + rf-1004,inter cc,any,,volte,,any
+518,1,0,0,1,0,0,0,any,,any + any,any,intra DU,any,volte,,s23+
+519,1,1,0,1,1,1,0,any,any,any + any,any,non ca,peak 4 path,any,nsa,s21
+520,1,0,0,1,0,0,0,any + inter,,any,inter cc,intra DU,cell edge,any,,
+521,1,0,0,2,0,1,0,any,,any,any,any,any,any,,any
+522,1,0,0,1,0,1,0,b1 + b1,,any + any,inter cc,any,any,volte,,
+523,1,1,0,2,1,0,0,b20,any + intra,any,any,any,cell edge,nsa,any,any
+524,1,1,0,1,1,0,0,b28 + b28,any,rf-1002,,any,any,nsa,any,
+525,0,0,1,0,1,0,2,b5,n28,any,any,any,peak 4 path,,any,s23+
+526,1,0,0,1,1,1,0,any,,any,,any,any,emtc,,6cc
+527,1,0,0,1,0,0,0,b8,,any,any,any,peak 4 path,volte,,
+528,1,1,0,1,2,0,0,b28,n3 + n1,any,inter cc,inter CU,any,nsa,nsa,s21
+529,1,1,0,1,1,0,0,any,n77 + n7,rf-1003 + rf-1007 + rf-1006 + rf-1001,any,non ca,null,any,nsa,any
+530,0,0,1,0,1,0,2,any,n77 + n28,rf-1006 + rf-1003,,any,peak 4 path,,nr,s23+
+531,1,0,0,1,0,1,0,b5,,rf-1006,any,any,any,emtc,,
+532,1,0,0,1,0,0,0,b1 + b1,,any,any,non ca,any,emtc,,s23+
+533,1,1,0,1,2,0,0,any,any + intra,rf-1000 + rf-1005,any,any,cell edge,any,any,any
+534,1,0,0,1,0,0,0,b8,,any + any,any,inter CU,handover,emtc,,
+535,1,0,0,1,0,0,1,b28 + b28,,any + any,,any,mobility,volte,,
+536,1,1,1,1,1,0,2,b7 + b1,any + inter,any + any + any,inter cc,any,cell edge,emtc,nr,s23+
+537,1,1,0,2,2,0,1,any,any,any,inter cc,non ca,any,any,any,s23+
+538,1,0,0,1,0,1,0,b5 + b5,,any,any,any,peak 4 path,any,,any
+539,1,0,0,1,0,0,0,b8 + b2,,any,any,any,peak 4 path,any,,
+540,1,0,0,1,0,1,0,b20 + b20,,rf-1002 + rf-1005,any,inter DU,any,volte,,
+541,1,1,0,1,1,0,0,b1,n7 + n28,rf-1004,any,any,,any,any,
+542,1,0,0,2,0,0,0,any + inter,,rf-1003,any,any,cell edge,any,,
+543,1,0,0,2,0,0,0,b5 + b5,,rf-1005 + rf-1001 + rf-1004,,intra DU,handover,volte,,
+544,1,1,1,1,1,0,3,b1,n1 + n1,any,any,inter DU,any,nsa,any,s23+
+545,1,1,1,1,1,0,1,any,n5,any + any,any,any,any,emtc,nr,6cc
+546,1,0,0,2,0,0,2,any + inter,,any,any,inter CU,any,any,,
+547,1,1,1,1,2,0,1,b8 + b8,n78 + n78,any,any,non ca,any,nsa,nsa,6cc
+548,1,0,0,1,1,0,1,b20 + b20,,rf-1003,inter cc,intra DU,null,emtc,,any
+549,1,1,0,2,1,0,0,b8,n7 + n1,any,any,intra DU,any,any,any,s23+
+550,1,1,0,1,2,0,0,any,any + inter,any + any,any,any,any,any,nsa,any
+551,1,0,0,1,0,0,2,b2 + b2,,any + any,inter cc,any,peak 4 path,volte,,
+552,1,1,0,1,1,0,0,b20 + b20,n77,rf-1007,intra cc,intra DU,peak 4 path,nsa,any,
+553,1,0,0,1,0,0,1,b28,,any + any + any,intra cc,inter DU,any,volte,,any
+554,1,1,0,1,1,2,0,b3,n1 + n78,rf-1002,,any,mobility,emtc,nr,6cc
+555,1,0,0,2,0,0,0,any,,any,any,any,peak 4 path,any,,any
+556,1,0,0,1,0,0,0,any + inter,,any,inter cc,any,cell edge,any,,
+557,1,0,0,1,1,0,0,any,,any,any,any,,emtc,,
+558,1,1,0,1,2,0,0,b5,any,rf-1003 + rf-1002,inter cc,any,any,nsa,any,
+559,1,0,0,1,0,0,0,b3,,any + any,any,any,any,volte,,s23+
+560,1,1,0,1,2,0,1,any,any,any,intra cc,any,any,any,any,s21
+561,1,0,0,1,0,0,0,b28 + b20,,any + any,any,inter DU,null,any,,any
+562,1,1,1,2,1,1,1,b28 + b28,any,rf-1007 + rf-1002,any,inter CU,any,emtc,nr,s23+
+563,0,0,1,1,2,0,1,any + inter,n3 + n3,any,any,inter CU,cell edge,,nr,any
+564,1,0,0,1,0,0,0,any,,rf-1005,inter cc,any,,any,,any
+565,0,0,1,0,1,0,1,any,any,any,any,non ca,cell edge,,any,s21
+566,1,1,1,1,1,0,1,b28 + b28,any,any + any,inter cc,non ca,any,nsa,nsa,any
+567,1,0,0,1,0,0,1,b1,,any + any,any,inter CU,any,volte,,
+568,1,0,0,3,0,0,0,any,,any,any,intra DU,any,any,,
+569,1,1,0,1,3,0,0,b20,any,rf-1005,inter cc,any,mobility,nsa,nsa,6cc
+570,1,0,0,1,1,0,0,b28,,rf-1001,any,inter DU,any,any,,s21
+571,1,1,0,1,1,0,0,b7 + b28,any + inter,rf-1001 + rf-1003,any,intra DU,cell edge,emtc,any,
+572,0,0,1,0,1,0,1,b8 + b5,any + intra,rf-1003,any,inter DU,mobility,,nr,
+573,1,0,0,2,0,0,1,b8,,rf-1000,any,any,any,volte,,s23+
+574,0,0,1,0,1,0,1,any + intra,any,rf-1000,inter cc,inter DU,peak 4 path,,nr,
+575,1,0,0,1,0,0,0,b20,,any,inter cc,any,peak 4 path,any,,any
+576,1,1,1,1,1,0,1,b20,any,rf-1003 + rf-1004,inter cc,non ca,any,nsa,any,any
+577,1,0,0,2,0,0,0,any + inter,,any,any,non ca,peak 4 path,volte,,
+578,1,0,0,1,0,0,0,b5,,rf-1003,any,any,cell edge,any,,any
+579,1,0,0,1,0,0,0,any,,any + any,any,inter DU,mobility,any,,any
+580,1,0,0,1,0,0,0,any + intra,,any,any,inter CU,mobility,volte,,
+581,0,0,1,0,1,0,2,any + intra,n41 + n78,any + any + any,intra cc,any,any,,nr,any
+582,1,0,0,1,0,1,1,b20 + b28,,any,,non ca,any,any,,
+583,1,0,0,1,0,0,0,b3,,any,intra cc,any,any,any,,s21
+584,1,1,0,2,1,0,1,b5 + b5,n41,rf-1006,any,any,mobility,nsa,nsa,6cc
+585,1,0,0,1,0,0,0,any,,rf-1006,intra cc,inter DU,cell edge,any,,any
+586,1,1,0,1,2,0,0,b2,n78 + n7,rf-1001 + rf-1004,inter cc,any,any,nsa,any,s21
+587,1,1,0,1,1,0,0,b5 + b5,n77 + n5,rf-1005,any,inter CU,any,any,nsa,
+588,1,0,0,1,0,0,0,any,,any,intra cc,non ca,cell edge,any,,
+589,1,0,0,1,0,0,0,any,,any,any,any,mobility,volte,,any
+590,1,0,0,1,1,1,0,any + inter,,rf-1003 + rf-1001 + rf-1007,inter cc,non ca,any,any,,s23+
+591,1,0,0,2,0,0,0,b28,,rf-1006,,intra DU,any,any,,s23+
+592,1,1,0,2,1,1,0,b2,any,any + any,,inter DU,null,any,nsa,any
+593,0,0,1,0,1,0,1,any + intra,n1,rf-1003 + rf-1005 + rf-1006,any,non ca,any,,nr,
+594,1,1,0,2,1,0,1,b1,n41,rf-1005 + rf-1003,inter cc,any,peak 4 path,nsa,any,
+595,1,0,0,1,0,0,1,b5 + b28,,any,intra cc,non ca,any,volte,,any
+596,1,1,0,2,1,0,0,any,n3 + n3,any + any + any,,non ca,mobility,any,nr,
+597,1,0,0,1,0,0,0,b28 + b2,,rf-1005,any,any,any,emtc,,s23+
+598,1,0,0,1,0,0,0,any,,any + any + any,any,non ca,handover,volte,,
+599,1,1,0,2,2,1,0,b5,n41,rf-1002,any,any,peak 4 path,any,nr,s21
+600,1,1,0,3,2,0,0,b2,any,any,intra cc,any,null,any,any,
+601,0,0,1,0,2,0,1,any + inter,n1,any + any,inter cc,any,any,,nr,s23+
+602,1,0,0,1,0,2,0,b7 + b8,,rf-1001,inter cc,non ca,any,emtc,,s21
+603,1,1,0,1,1,0,2,any + intra,n28 + n77,rf-1003,any,any,peak 4 path,nsa,any,
+604,1,0,0,3,1,0,0,any,,rf-1002 + rf-1001,any,any,any,volte,,s23+
+605,1,0,0,1,0,0,0,b3 + b3,,rf-1004 + rf-1003,,any,any,any,,
+606,1,0,0,1,0,0,0,any + inter,,any + any,,any,any,any,,
+607,1,0,0,1,0,0,1,any,,any,any,inter CU,,volte,,any
+608,0,0,1,0,1,1,1,,any,rf-1004 + rf-1000,intra cc,intra DU,any,,any,s23+
+609,1,1,0,1,3,0,0,b8 + b1,any + intra,any + any,any,inter DU,cell edge,nsa,any,s23+
+610,1,1,0,1,2,2,0,b28 + b3,n5,rf-1005,any,any,handover,nsa,nsa,
+611,1,0,0,3,1,0,1,b3 + b5,,any,inter cc,inter CU,,any,,s21
+612,1,0,0,1,0,2,0,any,,rf-1006,any,inter CU,handover,any,,
+613,1,1,0,1,2,0,0,b3 + b3,any + intra,rf-1000,any,any,cell edge,any,any,any
+614,1,0,0,2,0,0,0,any,,rf-1005,any,inter CU,cell edge,any,,
+615,1,1,0,1,3,1,0,b2 + b2,any + inter,any + any + any + any,,any,mobility,any,nr,any
+616,1,0,0,1,0,0,0,any,,any,any,any,mobility,any,,
+617,1,1,1,1,1,0,1,b5 + b2,n41 + n41,any,inter cc,inter CU,any,any,nr,
+618,0,0,1,0,1,0,1,b1 + b2,any + intra,any + any,inter cc,inter DU,handover,,nr,
+619,1,1,1,1,1,0,1,b8,n28,rf-1004 + rf-1000,inter cc,any,any,any,any,any
+620,1,1,1,1,2,1,2,any,any,any + any,inter cc,non ca,any,any,any,
+621,1,1,0,2,1,1,0,b5,any + inter,any,any,non ca,mobility,any,nsa,
+622,1,1,0,1,1,0,0,any,n77,rf-1007 + rf-1000,any,any,any,any,any,
+623,1,0,0,1,0,0,0,any,,rf-1007 + rf-1001 + rf-1004,,any,any,emtc,,
+624,1,1,1,1,1,0,1,b2 + b8,any + inter,any + any,,any,any,any,nr,any
+625,1,1,0,2,1,0,0,b2 + b5,any,any + any,any,inter DU,handover,nsa,any,s23+
+626,1,0,0,1,0,0,0,b7 + b7,,rf-1007,any,any,any,any,,s23+
+627,1,1,0,1,1,1,0,b28,n7 + n5,any + any,intra cc,any,null,any,nsa,
+628,1,0,0,1,0,0,0,b20,,any,,intra DU,any,any,,
+629,1,0,0,1,1,1,0,b20,,any,,any,,any,,any
+630,1,1,0,1,2,0,0,any,any,any,intra cc,any,handover,any,any,any
+631,1,1,0,1,1,0,1,any,n3,rf-1005,any,intra DU,null,any,nsa,
+632,1,0,0,1,0,0,0,any + inter,,any + any,intra cc,any,peak 4 path,emtc,,any
+633,1,1,0,1,1,0,0,any,n1 + n1,any,any,any,any,emtc,nr,
+634,1,0,0,1,0,0,0,any + inter,,rf-1005,any,intra DU,any,any,,any
+635,1,0,0,1,0,0,2,any + inter,,any,,inter DU,any,any,,any
+636,1,0,0,1,1,1,0,any + intra,,any + any,inter cc,non ca,handover,any,,s23+
+637,1,0,0,1,0,0,0,any,,any + any,,inter DU,mobility,any,,6cc
+638,1,0,0,1,0,0,1,any,,rf-1001,,non ca,any,volte,,any
+639,1,1,0,2,1,0,0,any,n7 + n78,any + any,any,inter DU,mobility,nsa,any,s21
+640,1,0,0,1,1,0,0,b20,,any + any,any,any,handover,any,,6cc
+641,1,1,0,1,1,0,0,b20,n5 + n3,rf-1004 + rf-1007,inter cc,any,cell edge,nsa,any,any
+642,1,1,1,2,1,0,3,b8,any,any + any,inter cc,intra DU,handover,nsa,nsa,s21
+643,1,0,0,1,0,0,1,b1 + b1,,rf-1005,any,any,cell edge,emtc,,any
+644,1,1,0,1,1,0,0,b7 + b5,n7 + n3,any,any,inter CU,,nsa,nsa,any
+645,1,1,1,2,2,0,1,any,n1 + n77,any + any + any + any,intra cc,any,mobility,any,any,
+646,1,0,0,1,0,0,0,b3,,rf-1006 + rf-1003 + rf-1002,intra cc,any,null,any,,
+647,1,1,0,1,1,0,0,b3,any,any,intra cc,any,peak 4 path,any,any,any
+648,1,0,0,1,0,0,0,b8,,rf-1001 + rf-1005 + rf-1002,intra cc,any,peak 4 path,any,,any
+649,1,0,0,2,0,0,0,b7,,any + any + any,any,non ca,any,any,,
+650,0,0,1,1,2,0,1,b1,any,rf-1007,any,any,mobility,,any,any
+651,1,1,0,1,1,0,0,b7 + b7,n5 + n5,rf-1007,any,inter DU,cell edge,any,nr,
+652,1,1,1,1,1,0,1,b5,n5 + n5,any,intra cc,any,mobility,emtc,nr,s23+
+653,0,0,1,0,1,1,1,b28 + b28,n5 + n5,any,any,inter DU,,,any,s21
+654,1,0,0,1,0,0,0,any + intra,,any + any + any,inter cc,intra DU,mobility,volte,,6cc
+655,1,1,0,2,1,0,0,b3 + b5,n5 + n77,any,,any,any,any,nsa,s23+
+656,1,0,0,2,1,0,0,b1 + b7,,any + any,any,any,any,volte,,any
+657,0,0,1,0,1,0,1,any,any,any + any + any,,any,mobility,,any,
+658,1,1,0,1,1,0,0,b1 + b5,n78 + n78,rf-1004,any,non ca,any,nsa,nsa,s23+
+659,1,1,1,1,1,0,1,b2,n1,rf-1002,,any,,nsa,nsa,any
+660,1,1,0,1,1,1,0,b28,any,any,inter cc,non ca,any,emtc,nr,6cc
+661,1,1,0,1,1,0,0,any + inter,n77 + n77,rf-1002,intra cc,inter CU,any,nsa,nsa,6cc
+662,1,1,0,3,1,0,0,b7,any,rf-1006 + rf-1005,intra cc,non ca,handover,nsa,any,
+663,0,0,1,0,1,0,1,any + inter,n77 + n77,rf-1000 + rf-1004,inter cc,non ca,any,,any,any
+664,1,0,0,1,0,0,2,any + inter,,rf-1006,any,any,any,any,,
+665,1,1,0,2,1,0,0,any,n41 + n41,any + any + any + any,any,any,any,emtc,any,
+666,1,0,0,1,0,0,0,any,,rf-1006,,any,mobility,volte,,6cc
+667,1,1,0,1,1,0,0,b2,any + inter,any + any,any,inter CU,any,any,nr,
+668,1,1,0,1,1,1,0,b20,n41 + n41,any,inter cc,any,cell edge,nsa,any,
+669,0,0,1,0,1,0,2,b8,any,any,intra cc,inter DU,any,,nr,
+670,0,0,1,0,1,0,1,any + intra,any + inter,rf-1001,inter cc,non ca,handover,,any,6cc
+671,0,0,1,0,2,1,3,any,n1 + n5,rf-1002 + rf-1004,any,non ca,mobility,,nr,
+672,1,0,0,1,0,0,0,b2 + b20,,rf-1005 + rf-1002,any,inter DU,mobility,any,,any
+673,1,0,0,1,0,0,1,b1 + b5,,any + any,intra cc,inter DU,any,any,,s21
+674,1,1,0,2,1,0,0,any,any + inter,any + any,intra cc,non ca,any,any,any,s21
+675,1,0,0,1,1,0,0,b7 + b7,,rf-1005,any,non ca,any,any,,
+676,1,1,0,1,3,0,0,b5,any,any,any,any,any,nsa,nsa,
+677,1,1,0,2,3,0,0,b28,any + inter,rf-1004,intra cc,non ca,any,nsa,any,s21
+678,1,0,0,1,0,0,1,b20,,any,any,any,any,any,,
+679,1,0,0,3,0,0,0,any + inter,,any,any,any,any,emtc,,6cc
+680,1,0,0,2,0,1,0,b2 + b28,,any,intra cc,intra DU,mobility,any,,any
+681,0,0,1,0,1,0,1,any,n78,rf-1002 + rf-1005,any,non ca,any,,any,any
+682,1,1,1,2,1,0,1,any,n28,any,,any,any,any,any,any
+683,1,0,0,1,0,0,0,b1 + b8,,rf-1006 + rf-1002,,any,mobility,any,,s21
+684,1,1,1,1,1,0,1,any,n3 + n78,rf-1007,intra cc,any,any,any,nr,
+685,1,0,0,1,0,1,0,any,,any + any,any,intra DU,any,emtc,,any
+686,1,1,0,3,1,0,0,any + intra,any + inter,rf-1000 + rf-1006,any,any,peak 4 path,any,nsa,any
+687,1,0,0,1,0,1,0,any,,any,,non ca,cell edge,any,,6cc
+688,1,1,0,1,2,0,0,any,n7,rf-1003,any,inter CU,peak 4 path,any,any,
+689,1,0,0,1,1,0,1,any,,any,,inter DU,any,any,,
+690,1,1,0,1,1,0,1,b3 + b5,n5 + n5,rf-1006,any,intra DU,any,emtc,nr,s23+
+691,1,0,0,1,0,0,0,b1 + b1,,rf-1005,inter cc,inter CU,mobility,any,,
+692,1,1,1,1,3,0,2,b5,any,rf-1000,,any,any,volte,any,any
+693,1,0,0,1,0,0,1,any,,rf-1004,any,intra DU,any,any,,
+694,1,0,0,1,0,0,0,any,,rf-1004,intra cc,non ca,handover,emtc,,any
+695,1,0,0,2,0,0,0,any + inter,,rf-1007,inter cc,any,mobility,emtc,,s23+
+696,1,0,0,1,0,1,0,any,,rf-1004,inter cc,non ca,peak 4 path,any,,
+697,1,1,0,1,1,0,0,b8,n5 + n1,rf-1007,any,any,any,any,any,
+698,1,0,0,1,0,0,0,b8 + b3,,rf-1005,any,inter DU,any,any,,any
+699,1,0,0,1,0,0,0,any,,rf-1002 + rf-1001,any,any,null,emtc,,
+700,1,1,1,3,1,0,1,b7,any + inter,rf-1005 + rf-1004,inter cc,non ca,peak 4 path,any,any,
+701,1,0,0,1,0,1,0,any,,any,inter cc,any,mobility,any,,any
+702,1,0,0,1,0,0,0,any,,rf-1001,any,intra DU,any,emtc,,
+703,1,0,0,1,0,0,1,any,,rf-1004,any,inter CU,any,emtc,,
+704,1,1,0,1,1,0,0,any,n7 + n7,any,any,inter CU,mobility,nsa,any,
+705,1,1,1,1,2,0,1,b5 + b8,n78 + n78,rf-1002 + rf-1004,any,intra DU,handover,nsa,nsa,
+706,1,1,0,1,1,0,2,any,n41,rf-1005,any,inter DU,any,any,nsa,any
+707,1,0,0,1,1,0,0,any,,any,inter cc,non ca,null,any,,any
+708,1,0,0,1,0,0,0,b20,,any,any,inter CU,handover,any,,
+709,0,0,1,0,1,0,1,any,n77,any,any,any,,,nr,s21
+710,1,1,0,1,1,0,0,b8 + b20,any + intra,rf-1006,,non ca,any,emtc,any,
+711,1,0,0,1,0,1,0,any + intra,,rf-1003,,inter CU,peak 4 path,any,,
+712,1,1,0,1,1,0,0,b7,n28 + n3,any,intra cc,intra DU,handover,any,nsa,
+713,1,0,0,2,0,0,0,any,,rf-1001 + rf-1004,,any,any,emtc,,
+714,1,0,0,1,1,0,1,any + inter,,rf-1001 + rf-1003,inter cc,any,mobility,volte,,
+715,1,0,0,1,0,1,0,any + inter,,any + any + any,any,any,any,any,,
+716,1,1,1,1,2,0,1,any,any,any,inter cc,inter DU,any,nsa,any,s21
+717,1,0,0,1,0,0,0,b8 + b8,,rf-1000,any,intra DU,cell edge,emtc,,
+718,1,0,0,1,0,0,0,any + intra,,rf-1002,any,any,any,volte,,6cc
+719,1,0,0,2,0,0,0,b5 + b3,,rf-1004 + rf-1003 + rf-1002,intra cc,any,,volte,,
+720,1,0,0,1,0,0,1,b7,,any,intra cc,inter CU,any,any,,
+721,1,0,0,1,1,0,0,any,,any + any,any,inter CU,,emtc,,6cc
+722,1,0,0,2,0,0,0,b7 + b7,,any + any + any + any,,any,any,any,,
+723,1,1,1,1,1,0,1,any + intra,n5 + n77,any + any + any,any,any,any,any,nr,
+724,0,0,1,0,1,0,2,b3 + b3,any + inter,rf-1006,any,inter DU,any,,any,s21
+725,1,1,1,1,1,0,1,any + intra,any,rf-1003,,non ca,any,nsa,any,
+726,1,0,0,1,0,0,0,any,,any + any,intra cc,any,any,any,,
+727,1,1,0,1,1,0,0,any + intra,n77,any,any,non ca,handover,any,any,
+728,1,0,0,2,1,0,0,b8,,rf-1007,any,intra DU,any,emtc,,
+729,1,1,0,1,1,0,0,b7,any,any,inter cc,any,,any,any,s21
+730,1,0,0,1,2,0,0,any + intra,,any + any + any,,any,null,any,,s23+
+731,0,0,1,0,1,1,1,any,any,rf-1007 + rf-1000,,non ca,null,,nr,s23+
+732,0,0,1,1,1,1,1,b1 + b8,any,any + any + any + any,intra cc,any,cell edge,,nr,any
+733,1,0,0,1,0,0,0,b5 + b5,,rf-1002,any,intra DU,any,emtc,,
+734,1,0,0,1,0,0,0,any,,any,any,any,any,any,,s23+
+735,1,0,0,1,0,0,0,b1 + b1,,rf-1001,any,intra DU,cell edge,emtc,,6cc
+736,1,1,0,1,1,0,0,any,n77 + n77,rf-1002 + rf-1006 + rf-1003,inter cc,any,any,volte,nr,any
+737,1,0,0,1,0,0,0,b28,,any + any,any,any,any,any,,
+738,1,0,0,2,0,0,0,any,,rf-1003 + rf-1004,,any,,volte,,any
+739,1,1,0,1,1,1,0,any,n5 + n5,any,any,any,any,nsa,nsa,
+740,0,0,1,0,2,0,2,any + inter,n78,any,any,any,cell edge,,any,any
+741,1,0,0,1,0,0,0,b1 + b28,,any,any,any,any,any,,
+742,1,0,0,1,0,0,0,b28,,any + any + any + any,,non ca,,emtc,,any
+743,1,1,0,1,1,1,0,any + inter,n3 + n3,any,intra cc,intra DU,any,any,nsa,
+744,1,1,0,1,2,0,0,b5 + b20,n7 + n7,rf-1005 + rf-1000,any,any,any,nsa,any,
+745,1,1,1,1,2,0,2,b2,n7 + n77,any,intra cc,intra DU,any,any,nsa,s23+
+746,1,0,0,1,1,0,0,any + intra,,rf-1001,any,any,any,volte,,any
+747,1,1,0,1,1,0,0,any + inter,n28,rf-1006 + rf-1003,any,intra DU,any,any,any,s23+
+748,1,1,0,1,1,0,0,any + inter,n41 + n41,rf-1000 + rf-1001 + rf-1003,any,intra DU,mobility,emtc,nr,
+749,1,1,0,1,1,0,0,any + inter,any,rf-1003,inter cc,inter DU,any,nsa,nsa,
+750,1,0,0,1,0,0,0,any,,any + any,any,any,any,volte,,
+751,0,0,1,0,1,0,1,any + inter,any + inter,any,any,intra DU,any,,any,any
+752,0,0,1,1,1,0,1,any + inter,n5 + n3,rf-1006 + rf-1001 + rf-1003,,inter CU,any,,nr,
+753,0,0,1,0,2,0,2,any + intra,any,rf-1001 + rf-1006,any,non ca,any,,nr,
+754,1,1,0,2,1,0,0,any,any + inter,any + any,any,any,any,any,any,
+755,1,0,0,2,1,0,1,b28 + b28,,rf-1005 + rf-1006,any,intra DU,any,any,,
+756,1,1,0,1,1,0,0,any,n77,any,any,any,any,any,any,
+757,1,0,0,1,0,0,0,any + inter,,any + any,any,intra DU,,any,,6cc
+758,1,1,1,1,1,0,1,any + inter,n7 + n77,any,,any,any,emtc,nr,6cc
+759,1,0,0,1,0,0,0,b2,,any,any,any,any,any,,
+760,1,1,0,1,1,0,0,b7,any + inter,rf-1002,any,inter CU,any,any,any,any
+761,1,0,0,2,0,0,0,any + inter,,rf-1006 + rf-1004,,non ca,,emtc,,
+762,1,0,0,1,0,0,0,b5,,any,any,any,any,any,,s23+
+763,1,0,0,3,0,0,0,b5 + b5,,rf-1002 + rf-1003,any,any,mobility,emtc,,any
+764,1,0,0,1,0,0,0,b28 + b3,,any + any,any,non ca,cell edge,emtc,,any
+765,0,0,1,0,1,1,1,any,n7 + n5,rf-1001,any,any,mobility,,any,
+766,1,1,1,1,1,0,1,any + inter,any,rf-1007,intra cc,inter DU,any,volte,any,s21
+767,0,0,1,0,1,0,2,b20 + b5,any,rf-1002,any,non ca,null,,nr,6cc
+768,0,0,1,0,1,1,1,b1 + b7,any,any + any,intra cc,intra DU,any,,any,any
+769,1,0,0,1,0,0,0,any,,any,any,non ca,any,any,,
+770,0,0,1,0,1,0,1,b5,n5,any + any,any,non ca,any,,nr,s21
+771,1,1,0,2,1,0,0,any,any,rf-1006 + rf-1004,any,inter CU,any,nsa,any,
+772,1,0,0,1,0,1,0,b3 + b3,,rf-1001 + rf-1000 + rf-1007,,intra DU,mobility,any,,any
+773,1,1,0,2,1,0,0,b20 + b20,any + intra,any,any,inter CU,handover,emtc,any,s21
+774,1,0,0,2,0,0,0,any + intra,,rf-1007 + rf-1001 + rf-1006,any,any,any,volte,,s21
+775,1,0,0,1,0,0,0,b20 + b7,,rf-1000,any,any,any,volte,,s23+
+776,1,0,0,1,0,0,0,b3,,rf-1007,any,intra DU,any,volte,,
+777,1,1,0,2,2,0,0,b20 + b20,n5 + n41,any,intra cc,intra DU,null,emtc,nr,any
+778,1,1,0,1,1,0,0,any + intra,any + inter,rf-1007,intra cc,any,any,nsa,nsa,s21
+779,1,0,0,1,0,2,0,b3,,any + any,intra cc,non ca,any,any,,
+780,1,0,0,1,0,0,0,b3,,any + any + any,,any,any,volte,,
+781,0,0,1,0,1,0,1,b5 + b5,n3 + n3,any + any,intra cc,any,,,any,s21
+782,1,1,0,1,2,0,0,any + intra,any + intra,any + any,any,any,cell edge,any,nr,
+783,1,1,0,1,1,0,0,any,n78 + n3,any,inter cc,non ca,any,any,any,s23+
+784,1,1,0,1,2,0,0,b8,n78 + n78,any + any,inter cc,any,handover,volte,any,
+785,1,0,0,2,1,0,0,any + inter,,any + any,inter cc,any,any,volte,,
+786,1,1,0,1,2,0,0,any,any,rf-1007,any,inter DU,any,nsa,nsa,any
+787,1,0,0,1,0,0,0,any,,any + any,any,inter CU,,any,,any
+788,1,0,0,2,2,0,0,any + intra,,any,any,intra DU,mobility,any,,
+789,1,1,0,1,1,0,1,any + inter,any,rf-1007,any,non ca,,any,nsa,any
+790,1,0,0,2,0,0,0,b3 + b3,,any,any,any,any,volte,,
+791,0,0,1,1,1,0,1,b7,n1 + n41,rf-1000,intra cc,any,cell edge,,nr,6cc
+792,1,1,0,1,1,0,2,b3 + b3,any,any + any + any,intra cc,non ca,any,any,any,s23+
+793,1,1,0,1,2,0,1,any,n3 + n3,any + any + any + any,any,any,any,emtc,any,any
+794,1,0,0,1,0,0,0,any + inter,,any + any + any,intra cc,any,any,any,,
+795,1,0,0,1,0,0,0,any + inter,,any + any,any,inter CU,any,volte,,
+796,1,1,1,1,1,0,1,b8 + b2,any,rf-1002,any,inter CU,handover,any,any,
+797,1,0,0,1,1,0,0,b2 + b2,,any,,any,peak 4 path,any,,any
+798,1,1,0,2,1,0,0,b5,any + intra,rf-1003,inter cc,any,any,nsa,any,s23+
+799,1,0,0,1,0,2,0,b20,,rf-1002 + rf-1004,any,any,any,emtc,,any
+800,1,0,0,1,0,0,0,b20,,rf-1000 + rf-1003 + rf-1007,inter cc,any,any,any,,
+801,1,0,0,2,0,0,1,b3,,any + any,any,inter CU,any,any,,any
+802,0,0,1,1,1,0,1,b8 + b1,n3,any,any,any,any,,any,s23+
+803,1,1,1,1,1,0,1,any + intra,any,rf-1003 + rf-1005,inter cc,any,null,nsa,nsa,
+804,1,0,0,1,1,1,0,b28 + b7,,any + any,,any,any,any,,any
+805,1,1,0,1,3,0,1,any,any + inter,any,inter cc,intra DU,handover,emtc,nr,any
+806,1,1,1,1,3,0,2,b1,n5 + n5,any,any,any,any,nsa,any,
+807,1,0,0,1,0,0,0,any + intra,,rf-1007 + rf-1005 + rf-1003,any,any,peak 4 path,emtc,,any
+808,1,1,1,1,1,0,1,b2,any + inter,any,any,any,any,any,any,
+809,1,1,1,2,1,1,1,any + inter,any + intra,any + any,any,inter CU,null,nsa,any,
+810,1,0,0,1,0,0,0,b5 + b28,,any + any,,inter CU,any,any,,any
+811,1,1,0,1,1,1,0,any + intra,any,any + any,intra cc,any,null,nsa,nsa,
+812,1,0,0,1,0,0,0,b8,,rf-1002,inter cc,non ca,,volte,,s23+
+813,1,0,0,1,0,0,0,any,,any,any,any,handover,any,,
+814,1,1,0,1,1,0,0,b5 + b1,n78,rf-1003,inter cc,inter DU,,volte,any,6cc
+815,0,0,1,0,1,0,2,b3,n7 + n28,any,any,any,peak 4 path,,nr,6cc
+816,1,1,1,1,2,0,2,any + inter,any + intra,any,any,any,cell edge,nsa,nsa,6cc
+817,1,1,0,1,1,0,0,any,n1,any,,any,cell edge,any,any,
+818,1,0,0,1,0,0,1,b8 + b8,,any + any + any,any,any,any,any,,
+819,1,1,1,3,1,0,2,any,any,any,any,any,any,any,any,s23+
+820,1,0,0,2,0,0,0,b28 + b28,,any,any,any,peak 4 path,any,,
+821,1,0,0,2,1,0,0,b7,,any + any,any,any,peak 4 path,emtc,,
+822,1,0,0,1,0,0,0,b2 + b2,,rf-1003,,intra DU,cell edge,any,,any
+823,1,0,0,1,1,0,0,any,,any,any,any,any,volte,,any
+824,1,0,0,1,0,0,1,b3 + b7,,any,any,non ca,handover,any,,
+825,1,0,0,1,0,0,0,b8 + b5,,any,any,inter CU,mobility,volte,,
+826,0,0,1,1,2,0,1,any + intra,n78 + n41,rf-1002 + rf-1004,any,inter DU,any,,any,
+827,0,0,1,0,1,0,1,b3,n77 + n77,any + any,intra cc,inter CU,null,,nr,any
+828,1,1,1,1,3,0,1,any,n3 + n3,rf-1007,any,any,handover,any,nsa,
+829,1,1,0,2,1,0,0,any + inter,n41 + n41,rf-1006 + rf-1003 + rf-1007,intra cc,non ca,any,any,any,
+830,1,1,0,1,3,0,0,any,n3,any,,any,handover,any,any,
+831,1,1,0,3,1,0,0,any + inter,any + intra,rf-1007 + rf-1003,any,any,,any,nsa,
+832,1,0,0,2,2,0,0,b1 + b1,,rf-1007,intra cc,any,null,volte,,
+833,1,0,0,2,1,0,0,b8 + b2,,rf-1006,any,inter CU,any,emtc,,any
+834,1,1,1,1,1,0,2,b2 + b7,any + intra,any,inter cc,any,,any,any,
+835,1,1,0,1,1,0,1,any,any + intra,rf-1001 + rf-1006,intra cc,inter DU,any,nsa,any,
+836,1,1,0,1,1,0,1,b2,n1 + n1,rf-1000 + rf-1003 + rf-1004,any,non ca,mobility,emtc,any,6cc
+837,1,0,0,1,0,0,0,b28 + b8,,rf-1004,any,any,any,volte,,
+838,1,0,0,2,0,0,0,any,,any,any,any,any,volte,,
+839,1,0,0,2,0,0,0,b8 + b28,,rf-1003,any,inter DU,any,volte,,
+840,0,0,1,0,1,0,1,,n78 + n77,rf-1006 + rf-1007 + rf-1003,any,any,cell edge,,nr,
+841,1,1,1,1,1,0,1,b28 + b3,any,any + any,any,inter DU,,any,nr,
+842,1,0,0,1,0,0,0,b20 + b3,,rf-1001,any,intra DU,,any,,
+843,1,0,0,1,0,0,0,b5,,any + any,intra cc,intra DU,any,emtc,,
+844,1,0,0,1,0,0,0,b3 + b3,,any,any,any,any,any,,
+845,1,0,0,1,0,0,0,b1 + b1,,any,,any,mobility,emtc,,any
+846,1,0,0,1,1,0,0,b20 + b7,,rf-1005 + rf-1001,any,any,any,emtc,,
+847,1,1,0,1,1,0,0,b5 + b5,any,any,any,any,peak 4 path,any,any,any
+848,1,1,1,1,1,0,1,b2 + b2,any,rf-1007 + rf-1001,intra cc,intra DU,any,any,nsa,s23+
+849,1,0,0,1,0,0,0,any + intra,,rf-1003 + rf-1000,any,any,any,any,,6cc
+850,1,1,0,1,1,0,0,any,any + inter,rf-1006 + rf-1000,intra cc,non ca,handover,nsa,any,
+851,1,0,0,1,0,0,0,any + inter,,rf-1005 + rf-1007,any,non ca,peak 4 path,any,,
+852,1,1,0,1,1,0,0,any,any,rf-1005 + rf-1004 + rf-1000,any,any,handover,volte,any,
+853,1,1,1,1,1,0,2,any + intra,n7 + n77,rf-1003,any,intra DU,mobility,any,nsa,s23+
+854,1,1,1,1,3,0,1,b5,n3 + n41,any,intra cc,any,any,any,any,
+855,1,1,0,1,2,0,0,any,any,any,any,non ca,any,any,any,s21
+856,0,0,1,0,1,1,1,b7,n3 + n78,any,any,any,handover,,any,s21
+857,0,0,1,0,2,0,2,any,n1,any + any,inter cc,any,any,,nr,
+858,1,1,0,2,1,0,0,any + intra,any,any + any,intra cc,intra DU,any,any,any,any
+859,1,1,0,1,1,0,0,b2 + b2,n3 + n1,any + any,any,any,any,any,any,s21
+860,1,0,0,1,0,0,0,any,,rf-1007 + rf-1001,any,any,null,volte,,
+861,1,0,0,1,0,0,0,any,,any,any,any,any,emtc,,any
+862,1,1,0,1,1,0,1,b28 + b28,any + intra,any,any,inter CU,cell edge,any,any,
+863,1,1,0,1,2,0,0,b3 + b8,n5 + n7,rf-1006,inter cc,inter CU,any,any,any,
+864,1,0,0,2,0,0,0,any,,rf-1007,any,inter CU,any,emtc,,
+865,0,0,1,0,1,0,1,b1 + b5,any,any + any,inter cc,any,handover,,nr,any
+866,1,0,0,1,0,0,0,any,,rf-1002,intra cc,intra DU,any,any,,s23+
+867,1,0,0,1,0,0,0,b20 + b20,,any + any,any,inter DU,any,any,,
+868,1,1,0,1,1,0,0,b3,any,any + any,intra cc,any,any,any,any,
+869,1,0,0,1,0,0,0,any + inter,,rf-1000,inter cc,non ca,any,volte,,
+870,1,1,0,1,2,0,0,any,n7 + n41,rf-1003,any,inter DU,any,nsa,any,
+871,1,0,0,2,0,0,0,b2 + b1,,rf-1000,any,non ca,null,volte,,any
+872,1,1,1,1,1,0,1,b2 + b2,n28,any,inter cc,non ca,any,emtc,any,
+873,1,1,0,1,1,0,0,any + inter,n28,any,intra cc,intra DU,any,volte,any,
+874,0,0,1,0,1,0,1,any,n1,any + any,any,non ca,any,,nr,
+875,1,1,0,2,2,0,1,any + intra,n7,any,any,any,handover,any,nsa,
+876,1,0,0,3,0,1,0,b5,,any,any,inter DU,any,emtc,,6cc
+877,1,0,0,1,0,0,0,b7,,rf-1006 + rf-1007,inter cc,inter DU,,volte,,any
+878,1,0,0,1,0,0,0,any + intra,,any + any,,any,any,any,,any
+879,0,0,1,0,1,0,1,any,any,any + any,any,any,handover,,any,any
+880,0,0,1,0,1,0,1,,any,rf-1003 + rf-1007,any,any,,,nr,any
+881,1,0,0,2,0,0,0,any + inter,,rf-1004,any,inter CU,any,any,,
+882,1,1,0,1,1,1,0,any,any,any,inter cc,any,peak 4 path,emtc,any,any
+883,1,1,0,1,1,0,0,b2 + b2,any + inter,any,,intra DU,any,any,any,6cc
+884,1,1,0,1,1,0,0,b2,n5,any,inter cc,non ca,any,nsa,any,any
+885,1,0,0,1,0,0,0,any,,rf-1006,any,any,null,any,,any
+886,1,1,0,2,2,0,0,any,any + intra,rf-1001 + rf-1004,intra cc,inter DU,any,any,any,s23+
+887,1,0,0,2,0,0,0,b5 + b5,,any + any,any,non ca,,any,,s23+
+888,1,1,1,1,3,0,1,any,n41 + n78,rf-1001 + rf-1003,,inter CU,any,nsa,nsa,any
+889,1,0,0,2,1,1,0,b5,,any + any,,any,mobility,emtc,,
+890,1,0,0,3,0,1,0,any + inter,,any,any,any,,volte,,
+891,1,1,1,1,1,0,2,any,n28,rf-1007 + rf-1003 + rf-1005,,any,null,nsa,nsa,6cc
+892,0,0,1,0,2,0,1,,n78,any + any,intra cc,inter DU,handover,,any,s23+
+893,1,1,0,2,1,1,0,any + intra,any,any + any,any,inter CU,peak 4 path,nsa,nsa,any
+894,1,0,0,1,0,0,0,b7 + b7,,rf-1001 + rf-1007,intra cc,any,any,any,,
+895,1,0,0,1,0,0,0,any + intra,,any,inter cc,any,any,emtc,,any
+896,1,0,0,1,0,0,0,b1,,any,any,any,any,any,,any
+897,1,0,0,1,0,0,0,any,,rf-1006 + rf-1001,any,any,,any,,
+898,1,1,0,2,1,0,0,b28 + b28,n28 + n28,any,any,inter DU,null,any,any,
+899,1,0,0,1,0,0,1,any,,any + any,,any,any,any,,6cc
+900,1,0,0,1,0,0,0,b8,,any + any,intra cc,intra DU,peak 4 path,any,,6cc
+901,1,1,0,1,1,0,0,any,any,any,intra cc,non ca,handover,nsa,any,
+902,1,0,0,3,0,0,0,b28,,any + any,inter cc,inter DU,null,any,,any
+903,1,1,0,2,1,0,0,any + inter,any,any,intra cc,any,handover,nsa,any,any
+904,1,0,0,1,1,0,0,any + intra,,any,any,non ca,handover,volte,,any
+905,1,0,0,1,0,0,0,b3,,rf-1003 + rf-1005,any,any,cell edge,any,,any
+906,1,1,1,1,1,0,1,any,n78 + n78,rf-1004,any,any,any,any,nr,any
+907,1,0,0,1,0,0,1,b2,,rf-1004 + rf-1003,intra cc,inter CU,cell edge,any,,s21
+908,1,0,0,1,0,0,0,any + intra,,rf-1002,inter cc,inter DU,any,volte,,
+909,1,0,0,1,1,0,0,b1,,rf-1004,inter cc,any,peak 4 path,emtc,,s21
+910,1,1,0,1,1,0,0,b28 + b1,n77 + n5,rf-1001,any,non ca,handover,any,any,s21
+911,1,0,0,2,2,0,0,any,,rf-1005,any,intra DU,any,emtc,,
+912,1,0,0,1,0,0,0,any,,rf-1002,any,any,cell edge,any,,
+913,1,1,0,2,1,0,0,any,any,any,,any,cell edge,any,any,s21
+914,1,0,0,1,1,1,0,b28,,rf-1002 + rf-1007,any,intra DU,mobility,any,,
+915,1,1,0,2,3,0,0,b7,n77,any,any,inter DU,any,emtc,nr,
+916,1,1,0,2,1,0,0,b2 + b2,any + inter,any,any,intra DU,,nsa,any,
+917,1,1,1,1,1,2,1,b28,any + inter,rf-1001,any,any,handover,nsa,any,any
+918,1,0,0,1,0,0,0,any,,rf-1005 + rf-1002,any,inter DU,mobility,emtc,,s21
+919,1,1,0,1,1,0,0,b8,n7,rf-1000 + rf-1002,intra cc,any,any,volte,nr,
+920,1,0,0,3,1,0,0,b5 + b2,,rf-1001 + rf-1000,any,intra DU,,any,,
+921,1,1,1,1,1,0,2,b1 + b3,n77,rf-1000,inter cc,non ca,any,any,nsa,s21
+922,0,0,1,0,1,0,2,any + inter,n1 + n1,any,any,any,,,any,
+923,1,1,1,1,1,0,1,b28,n1,any + any,,inter DU,,any,nsa,any
+924,1,1,1,2,1,1,1,any + inter,n7 + n78,any,any,non ca,any,any,any,s21
+925,1,1,0,1,1,0,0,b1 + b1,n5 + n1,rf-1003,any,any,mobility,any,any,any
+926,1,1,0,2,1,0,0,b20 + b20,n7 + n7,any,any,any,cell edge,any,any,s23+
+927,1,0,0,1,0,0,0,b1,,rf-1000,any,any,cell edge,any,,any
+928,1,1,0,1,1,2,0,any + intra,any + intra,rf-1002 + rf-1000,any,inter DU,any,any,any,s23+
+929,1,0,0,1,0,0,0,b8 + b8,,rf-1000 + rf-1002 + rf-1001,any,any,any,emtc,,s21
+930,1,0,0,1,0,0,0,b2 + b1,,rf-1004,any,any,peak 4 path,any,,s21
+931,1,1,1,1,1,1,1,b20,n77 + n78,any + any,any,any,any,emtc,any,s23+
+932,1,1,0,1,1,0,0,b20 + b7,any + intra,any + any + any,any,any,peak 4 path,volte,any,6cc
+933,1,1,1,2,1,0,2,any,n3 + n3,rf-1006,,any,any,nsa,nsa,6cc
+934,1,1,1,1,1,0,1,any,n77,rf-1001,any,any,any,nsa,nsa,6cc
+935,1,1,1,1,1,0,1,any,n1,any,,inter CU,cell edge,any,nsa,s21
+936,1,1,1,3,1,1,1,any,any + inter,rf-1006,inter cc,non ca,any,any,nsa,
+937,1,0,0,1,0,0,0,any + intra,,any,any,any,any,any,,
+938,1,1,1,1,2,0,2,any + inter,any + intra,any + any,intra cc,any,any,any,any,s21
+939,1,0,0,1,0,0,1,any + intra,,rf-1007 + rf-1002,intra cc,intra DU,any,any,,
+940,1,0,0,1,1,0,0,b20,,any + any,any,intra DU,cell edge,volte,,s23+
+941,1,0,0,1,0,0,0,any + intra,,rf-1007,any,any,null,any,,s23+
+942,1,1,0,1,1,0,0,any,n3,any,any,any,handover,any,any,
+943,1,1,1,1,1,0,2,b20 + b20,any,any,intra cc,non ca,,any,nsa,
+944,1,0,0,3,0,0,0,any + inter,,any,,any,mobility,emtc,,any
+945,1,1,0,1,1,0,0,any,any + intra,rf-1003,any,any,mobility,any,any,any
+946,1,1,0,2,1,0,0,b20,n1 + n28,any + any,any,intra DU,,nsa,any,any
+947,1,0,0,1,0,0,1,any,,any,any,intra DU,,any,,
+948,1,0,0,1,2,0,0,b2,,any,intra cc,intra DU,handover,emtc,,
+949,1,0,0,3,0,0,0,b5,,any + any,any,any,peak 4 path,any,,
+950,1,1,0,3,1,2,1,b2,any + intra,any,any,inter CU,mobility,volte,any,
+951,1,0,0,1,2,0,0,b8 + b28,,rf-1007 + rf-1005,inter cc,intra DU,null,any,,any
+952,1,0,0,1,0,0,0,any + inter,,rf-1006,any,inter CU,cell edge,volte,,any
+953,0,0,1,0,1,0,2,b7 + b20,any,rf-1003,any,inter DU,handover,,nr,any
+954,1,1,0,1,1,0,0,b28 + b1,any + inter,any,inter cc,any,any,volte,any,any
+955,1,0,0,2,1,0,0,b20,,any + any,intra cc,inter CU,any,volte,,
+956,1,0,0,1,0,0,2,any + intra,,rf-1000 + rf-1002,intra cc,any,any,volte,,
+957,1,0,0,1,0,1,0,any,,any,any,any,any,any,,
+958,1,0,0,1,1,0,0,any,,any,,inter CU,any,volte,,s23+
+959,1,1,0,1,1,0,0,any,any,any + any,,any,any,nsa,any,any
+960,1,1,1,2,1,1,1,b8,n28 + n1,any + any,inter cc,inter CU,cell edge,any,any,s21
+961,1,1,0,1,1,0,0,b2 + b2,any,rf-1000,any,any,any,any,nsa,
+962,1,1,0,1,1,0,0,b5,n5 + n5,rf-1004,any,any,handover,any,nr,
+963,1,1,1,2,3,0,2,b2 + b8,n78,any,intra cc,any,mobility,nsa,any,s21
+964,1,1,1,1,2,0,1,any,n77,any,intra cc,any,any,emtc,any,any
+965,1,0,0,1,0,0,0,any,,rf-1001 + rf-1005,intra cc,any,mobility,emtc,,
+966,1,1,1,1,1,0,1,b3 + b3,n5 + n78,rf-1005 + rf-1001 + rf-1000 + rf-1003,any,any,cell edge,any,any,any
+967,1,1,1,2,1,0,3,b8,n77,any,inter cc,inter CU,any,nsa,any,
+968,1,0,0,1,0,0,0,any,,rf-1006 + rf-1002,,any,handover,emtc,,s21
+969,1,0,0,2,0,0,0,b3 + b3,,rf-1006,any,intra DU,cell edge,emtc,,
+970,1,1,0,1,1,0,0,b28,n77,any,any,inter DU,peak 4 path,any,nsa,any
+971,1,0,0,1,0,0,0,any,,rf-1006 + rf-1002,intra cc,any,null,volte,,s21
+972,1,0,0,2,0,0,0,b3 + b7,,any,intra cc,intra DU,any,any,,s23+
+973,0,0,1,0,1,0,2,b20 + b20,n5 + n1,any + any,inter cc,inter DU,peak 4 path,,nr,
+974,1,1,0,1,1,0,0,b2 + b2,n5,any,inter cc,any,any,nsa,any,any
+975,1,1,1,2,1,1,1,any,any + inter,any,any,any,any,nsa,nsa,
+976,1,0,0,1,0,0,0,any,,rf-1004,,any,cell edge,any,,any
+977,1,0,0,1,0,0,0,b3 + b3,,rf-1004,,any,any,volte,,6cc
+978,1,1,0,2,1,0,0,any + intra,any,rf-1006 + rf-1004,any,intra DU,any,nsa,nsa,
+979,0,0,1,0,1,0,1,b8,any,any + any + any,any,any,handover,,nr,any
+980,1,1,0,1,2,0,1,b28 + b28,any + intra,any,intra cc,any,any,nsa,nsa,s23+
+981,1,1,0,1,1,0,1,b28 + b28,n3 + n3,any,inter cc,any,peak 4 path,any,any,6cc
+982,1,1,0,2,1,1,0,any + inter,n7 + n78,rf-1006,any,any,any,nsa,nsa,
+983,1,0,0,2,0,1,0,b7 + b1,,any,inter cc,inter DU,handover,emtc,,6cc
+984,1,1,1,2,1,1,3,any,n5 + n5,rf-1004 + rf-1000,intra cc,any,peak 4 path,volte,nr,s21
+985,1,0,0,1,0,0,0,b8 + b8,,any,any,inter DU,any,volte,,6cc
+986,0,0,1,0,1,0,1,any,any + inter,any + any,intra cc,inter DU,peak 4 path,,nr,
+987,1,1,1,3,1,0,1,any + intra,any + intra,rf-1006,inter cc,inter DU,mobility,emtc,any,6cc
+988,1,1,1,1,1,0,2,b7 + b8,any,rf-1001,any,any,any,any,any,any
+989,1,1,1,1,1,2,2,any + inter,any,any,any,any,cell edge,volte,nr,any
+990,1,0,0,1,0,1,0,any,,rf-1001,inter cc,any,any,any,,
+991,1,1,0,1,1,0,0,b3,any + inter,any,any,intra DU,cell edge,nsa,nsa,s21
+992,1,0,0,1,0,0,0,any + intra,,rf-1005,any,any,any,volte,,s21
+993,1,1,1,1,1,0,1,any,any + intra,any,,non ca,cell edge,nsa,nsa,any
+994,1,0,0,1,1,0,2,b7 + b7,,rf-1003,inter cc,inter CU,any,emtc,,s21
+995,1,1,0,1,1,0,0,any,n3,any,any,any,any,any,nr,any
+996,1,1,0,1,1,0,0,any,n5 + n3,rf-1005,,inter CU,cell edge,any,any,
+997,1,1,1,2,1,0,1,any,any,any,intra cc,non ca,any,any,nsa,s21
+998,1,0,0,1,0,0,0,any + inter,,rf-1004,any,intra DU,any,any,,any
+999,1,0,0,1,0,0,0,b28 + b5,,any,intra cc,any,any,emtc,,
+1000,1,0,0,1,0,0,0,b8 + b8,,any + any + any,any,inter DU,any,any,,

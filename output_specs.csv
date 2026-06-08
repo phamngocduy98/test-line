@@ -1,0 +1,5 @@
+spec_id,assigned_tc_ids,assigned_count,covered_tc_ids,covered_count,equipment_count,total_delta,solve_status,tech lte,tech nsa,tech nr sa,enb,vdu,au,cu,lte band,nr band,ru,cc location,ca type,rf condition,ue capa lte,ue capa nr,ue capa special
+spec_1,5,1,5,1,4,0,OPTIMAL,1,0,0,1,0,0,0,inter + any,,any + any,inter cc,intra DU,,any,,
+spec_2,2 + 4,2,2 + 4,2,6,9,OPTIMAL,1,1 + 0,1 + 0,1,1 + 0,0,0,b1 + b1 + intra,n1,rf-1234 + any,any,intra DU,,volte,any,
+spec_3,3 + 6,2,3 + 6,2,6,5,OPTIMAL,1,0 + 1,0,1,0 + 1,0,0,any,any,any,any,non ca,peak 4 path,nsa + any,nsa,
+spec_4,1,1,1,1,6,0,OPTIMAL,1,1,0,2,0,0,0,b1 + b2,,rf-1234 + rf-1111,intra cc,inter DU,mobility,any,,s22
