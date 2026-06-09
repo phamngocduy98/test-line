@@ -70,7 +70,20 @@ def parse_args() -> argparse.Namespace:
             "0 means check all rows. Exact-row candidates always cover themselves."
         ),
     )
+    parser.add_argument(
+        "--ignore-tech-and-ue-capa",
+        action="store_true",
+        help=(
+            "Ignore all tech and ue capa columns during optimization. "
+            "Ignored columns are blank in the output."
+        ),
+    )
     return parser.parse_args()
+
+
+def is_temporarily_ignored_column(column: str) -> bool:
+    normalized = column.strip().lower()
+    return normalized.startswith("tech ") or normalized.startswith("ue capa ")
 
 
 def parse_cell(value: str | None) -> tuple[str, ...]:
@@ -674,6 +687,12 @@ def main() -> int:
 
     input_columns, cases = load_cases(input_path)
     requirement_columns = [column for column in input_columns if column != "tc_id"]
+    if args.ignore_tech_and_ue_capa:
+        requirement_columns = [
+            column
+            for column in requirement_columns
+            if not is_temporarily_ignored_column(column)
+        ]
 
     candidates = generate_candidates(
         requirement_columns=requirement_columns,

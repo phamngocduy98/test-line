@@ -71,6 +71,14 @@ intra-band requirement.
 Relationship tokens may remain in output specs when no concrete resolution is
 available, for example `any + intra`.
 
+## Temporary Requirement Exclusion
+
+Passing `--ignore-tech-and-ue-capa` excludes every column whose normalized name
+starts with `tech ` or `ue capa ` from candidate generation, coverage, deltas,
+validation, and equipment count. The columns remain in the output CSV but their
+values are blank. Without the flag, these requirements retain their normal
+behavior.
+
 ## Equipment Count
 
 Equipment count is intentionally narrower than total requirement count.

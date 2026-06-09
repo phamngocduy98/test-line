@@ -84,6 +84,11 @@ def parse_args() -> argparse.Namespace:
         help="Passed through to solve_test_lines.py. 0 checks all rows.",
     )
     parser.add_argument(
+        "--ignore-tech-and-ue-capa",
+        action="store_true",
+        help="Pass --ignore-tech-and-ue-capa to the solver.",
+    )
+    parser.add_argument(
         "--variation",
         choices=("low", "medium", "high"),
         default="medium",
@@ -253,6 +258,8 @@ def run_solver(args: argparse.Namespace) -> int:
         "--max-cover-checks-per-candidate",
         str(args.max_cover_checks_per_candidate),
     ]
+    if args.ignore_tech_and_ue_capa:
+        command.append("--ignore-tech-and-ue-capa")
     started_at = time.monotonic()
     completed = subprocess.run(command, text=True, capture_output=True)
     elapsed = time.monotonic() - started_at
