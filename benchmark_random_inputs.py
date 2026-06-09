@@ -101,6 +101,18 @@ def parse_args() -> argparse.Namespace:
         help="Passed through to solve_test_lines.py. Default: 338.",
     )
     parser.add_argument(
+        "--second-pass-max-du",
+        type=int,
+        default=4,
+        help="Passed through to solve_test_lines.py. Default: 4.",
+    )
+    parser.add_argument(
+        "--second-pass-max-ru",
+        type=int,
+        default=4,
+        help="Passed through to solve_test_lines.py. Default: 4.",
+    )
+    parser.add_argument(
         "--variation",
         choices=("low", "medium", "high"),
         default="medium",
@@ -224,16 +236,29 @@ def make_row(tc_id: int, rng: random.Random, variation: str) -> dict[str, str]:
     tech_sa = "1" if tech_mode in {"lte_nsa_sa", "sa"} else "0"
 
     ue_lte, ue_nr, ue_special = sample_ue_capabilities(rng, tech_lte, tech_nsa, tech_sa)
+    du_counts = {
+        "enb": int(sample_numeric_equipment(rng, primary=tech_lte == "1")),
+        "vdu": int(
+            sample_numeric_equipment(
+                rng, primary=tech_nsa == "1" or tech_sa == "1"
+            )
+        ),
+        "au": int(sample_numeric_equipment(rng, primary=False)),
+        "cu": int(sample_numeric_equipment(rng, primary=tech_sa == "1")),
+    }
+    while sum(du_counts.values()) > 4:
+        largest = max(du_counts, key=du_counts.get)
+        du_counts[largest] -= 1
 
     return {
         "tc_id": str(tc_id),
         "tech lte": tech_lte,
         "tech nsa": tech_nsa,
         "tech nr sa": tech_sa,
-        "enb": sample_numeric_equipment(rng, primary=tech_lte == "1"),
-        "vdu": sample_numeric_equipment(rng, primary=tech_nsa == "1" or tech_sa == "1"),
-        "au": sample_numeric_equipment(rng, primary=False),
-        "cu": sample_numeric_equipment(rng, primary=tech_sa == "1"),
+        "enb": str(du_counts["enb"]),
+        "vdu": str(du_counts["vdu"]),
+        "au": str(du_counts["au"]),
+        "cu": str(du_counts["cu"]),
         "lte band": sample_band(rng, LTE_BANDS, variation, allow_blank=tech_lte == "0"),
         "nr band": sample_band(rng, NR_BANDS, variation, allow_blank=False) if tech_nsa == "1" or tech_sa == "1" else "",
         "ru": sample_ru(rng, variation),
@@ -274,6 +299,10 @@ def run_solver(args: argparse.Namespace) -> int:
         str(args.max_cover_checks_per_candidate),
         "--max-tc-per-spec",
         str(args.max_tc_per_spec),
+        "--second-pass-max-du",
+        str(args.second_pass_max_du),
+        "--second-pass-max-ru",
+        str(args.second_pass_max_ru),
     ]
     if args.ignore_tech_and_ue_capa:
         command.append("--ignore-tech-and-ue-capa")

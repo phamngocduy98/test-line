@@ -49,6 +49,11 @@ This keeps specs from becoming broad catch-all lines while still allowing useful
 merges. The delta is calculated per column, then summed for optimization and
 reporting.
 
+This restriction applies to the primary pass only. The second pass removes the
+delta limit so compatible first-pass lines can be consolidated more
+aggressively. Concrete requirements, slot cardinality, band relationships, and
+single-select rules still apply.
+
 ## Single-Select Columns
 
 `cc location` is a single-select column.
@@ -177,6 +182,17 @@ The second pass prioritizes:
 The same testcase assignment limit and full solution verification apply. The
 result is written to `output_specs_second_pass.csv` by default and can be
 changed with `--second-pass-output`.
+
+Every second-pass spec is also limited to:
+
+- DU total at most 4, calculated as the numeric sum of `enb`, `vdu`, `au`, and
+  `cu`;
+- RU total at most 4, calculated as the number of slots in `ru`.
+
+The defaults can be changed with `--second-pass-max-du` and
+`--second-pass-max-ru`. Exact-row candidates are retained in the second-pass
+pool to preserve feasibility. If an individual testcase itself exceeds either
+limit, the solver exits with that testcase ID and its required DU/RU counts.
 
 ## Timeout Behavior
 

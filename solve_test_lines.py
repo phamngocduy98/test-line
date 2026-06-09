@@ -91,6 +91,18 @@ def parse_args() -> argparse.Namespace:
         default=338,
         help="Maximum assigned testcases per selected spec. Default: 338.",
     )
+    parser.add_argument(
+        "--second-pass-max-du",
+        type=int,
+        default=4,
+        help="Maximum total DU equipment in a second-pass spec. Default: 4.",
+    )
+    parser.add_argument(
+        "--second-pass-max-ru",
+        type=int,
+        default=4,
+        help="Maximum RU slots in a second-pass spec. Default: 4.",
+    )
     return parser.parse_args()
 
 
@@ -185,7 +197,10 @@ def relation_satisfied(tokens: tuple[str, ...], relation: str) -> bool:
 
 
 def covers_column(
-    column: str, spec_tokens: tuple[str, ...], case_tokens: tuple[str, ...]
+    column: str,
+    spec_tokens: tuple[str, ...],
+    case_tokens: tuple[str, ...],
+    enforce_delta: bool = True,
 ) -> tuple[bool, int]:
     if not case_tokens:
         return True, 0
@@ -231,17 +246,25 @@ def covers_column(
         return False, 0
 
     delta = len(spec_tokens) - len(case_tokens)
-    if delta > 1:
+    if enforce_delta and delta > 1:
         return False, 0
     return True, max(0, delta)
 
 
 def coverage_delta(
-    requirement_columns: list[str], candidate_spec: dict[str, tuple[str, ...]], case: TestCase
+    requirement_columns: list[str],
+    candidate_spec: dict[str, tuple[str, ...]],
+    case: TestCase,
+    enforce_delta: bool = True,
 ) -> tuple[bool, int]:
     total_delta = 0
     for column in requirement_columns:
-        ok, delta = covers_column(column, candidate_spec[column], case.tokens[column])
+        ok, delta = covers_column(
+            column,
+            candidate_spec[column],
+            case.tokens[column],
+            enforce_delta=enforce_delta,
+        )
         if not ok:
             return False, 0
         total_delta += delta
@@ -330,6 +353,57 @@ def equipment_count(requirement_columns: list[str], spec: dict[str, tuple[str, .
     return total
 
 
+def du_equipment_count(
+    requirement_columns: list[str], spec: dict[str, tuple[str, ...]]
+) -> int:
+    return sum(
+        numeric_equipment(spec[column])
+        for column in DU_COLUMNS
+        if column in requirement_columns
+    )
+
+
+def ru_equipment_count(
+    requirement_columns: list[str], spec: dict[str, tuple[str, ...]]
+) -> int:
+    if RU_COLUMN not in requirement_columns:
+        return 0
+    return len(spec[RU_COLUMN])
+
+
+def within_second_pass_equipment_limits(
+    requirement_columns: list[str],
+    spec: dict[str, tuple[str, ...]],
+    max_du: int,
+    max_ru: int,
+) -> bool:
+    return (
+        du_equipment_count(requirement_columns, spec) <= max_du
+        and ru_equipment_count(requirement_columns, spec) <= max_ru
+    )
+
+
+def validate_second_pass_case_limits(
+    requirement_columns: list[str],
+    cases: list[TestCase],
+    max_du: int,
+    max_ru: int,
+) -> None:
+    for case in cases:
+        spec = merge_cases(requirement_columns, [case])
+        if spec is None:
+            raise SystemExit(
+                f"testcase {case.tc_id} cannot form a valid second-pass spec"
+            )
+        du_count = du_equipment_count(requirement_columns, spec)
+        ru_count = ru_equipment_count(requirement_columns, spec)
+        if du_count > max_du or ru_count > max_ru:
+            raise SystemExit(
+                f"testcase {case.tc_id} exceeds second-pass equipment limits "
+                f"(DU={du_count}/{max_du}, RU={ru_count}/{max_ru})"
+            )
+
+
 def spec_signature(spec: dict[str, tuple[str, ...]]) -> tuple[tuple[str, tuple[str, ...]], ...]:
     return tuple((column, spec[column]) for column in sorted(spec))
 
@@ -372,6 +446,7 @@ def build_candidate(
     indices: Iterable[int],
     all_cases: list[TestCase],
     max_cover_checks: int,
+    enforce_delta: bool = True,
 ) -> Candidate | None:
     index_tuple = tuple(sorted(set(indices)))
     if not index_tuple:
@@ -390,14 +465,21 @@ def build_candidate(
         check_cases = [all_cases[index] for index in selected]
 
     for case in check_cases:
-        ok, delta = coverage_delta(requirement_columns, spec, case)
+        ok, delta = coverage_delta(
+            requirement_columns, spec, case, enforce_delta=enforce_delta
+        )
         if ok:
             covered.append(case.index)
             deltas.append(delta)
 
     for index in index_tuple:
         if index not in covered:
-            ok, delta = coverage_delta(requirement_columns, spec, all_cases[index])
+            ok, delta = coverage_delta(
+                requirement_columns,
+                spec,
+                all_cases[index],
+                enforce_delta=enforce_delta,
+            )
             if not ok:
                 return None
             covered.append(index)
@@ -657,6 +739,9 @@ def validate_solution(
     selected_indices: list[int],
     assignment_by_case: dict[int, int],
     max_tc_per_spec: int,
+    enforce_delta: bool = True,
+    max_du: int | None = None,
+    max_ru: int | None = None,
 ) -> None:
     if set(assignment_by_case) != {case.index for case in cases}:
         raise SystemExit("verification failed: every testcase must be assigned exactly once")
@@ -671,7 +756,12 @@ def validate_solution(
 
     for case in cases:
         candidate = candidates[assignment_by_case[case.index]]
-        ok, _ = coverage_delta(requirement_columns, candidate.spec, case)
+        ok, _ = coverage_delta(
+            requirement_columns,
+            candidate.spec,
+            case,
+            enforce_delta=enforce_delta,
+        )
         if not ok:
             raise SystemExit(f"verification failed: testcase {case.tc_id} is not covered")
         for column in SINGLE_SELECT_COLUMNS:
@@ -681,6 +771,14 @@ def validate_solution(
                     raise SystemExit(f"verification failed: {column} has multiple concrete values")
         if candidate.equipment_count != equipment_count(requirement_columns, candidate.spec):
             raise SystemExit("verification failed: equipment count mismatch")
+        if (
+            max_du is not None
+            and max_ru is not None
+            and not within_second_pass_equipment_limits(
+                requirement_columns, candidate.spec, max_du, max_ru
+            )
+        ):
+            raise SystemExit("verification failed: second-pass DU/RU limit exceeded")
 
 
 def generate_second_pass_candidates(
@@ -691,12 +789,31 @@ def generate_second_pass_candidates(
     assignment_by_case: dict[int, int],
     max_merge_candidates: int,
     max_cover_checks: int,
+    max_du: int,
+    max_ru: int,
 ) -> list[Candidate]:
     candidates_by_signature: dict[
         tuple[tuple[str, tuple[str, ...]], ...], Candidate
     ] = {}
     for candidate_index in selected_indices:
-        add_candidate(candidates_by_signature, first_candidates[candidate_index])
+        candidate = first_candidates[candidate_index]
+        if within_second_pass_equipment_limits(
+            requirement_columns, candidate.spec, max_du, max_ru
+        ):
+            add_candidate(candidates_by_signature, candidate)
+
+    for case in cases:
+        add_candidate(
+            candidates_by_signature,
+            build_candidate(
+                requirement_columns,
+                cases,
+                [case.index],
+                cases,
+                max_cover_checks,
+                enforce_delta=False,
+            ),
+        )
 
     assigned_by_candidate: dict[int, list[int]] = defaultdict(list)
     for case_index, candidate_index in assignment_by_case.items():
@@ -737,8 +854,13 @@ def generate_second_pass_candidates(
                 seed_indices,
                 cases,
                 max_cover_checks,
+                enforce_delta=False,
             )
             if candidate is None:
+                continue
+            if not within_second_pass_equipment_limits(
+                requirement_columns, candidate.spec, max_du, max_ru
+            ):
                 continue
             before = len(candidates_by_signature)
             add_candidate(candidates_by_signature, candidate)
@@ -775,6 +897,7 @@ def write_output(
     selected_indices: list[int],
     assignment_by_case: dict[int, int],
     solve_status: str,
+    enforce_delta: bool = True,
 ) -> tuple[int, int, int, int, list[int]]:
     assignments_by_candidate: dict[int, list[TestCase]] = defaultdict(list)
     for case in cases:
@@ -811,7 +934,12 @@ def write_output(
             assigned_ids = [case.tc_id for case in assigned_cases]
             covered_ids = [cases[index].tc_id for index in candidate.covered]
             assigned_delta = sum(
-                coverage_delta(requirement_columns, candidate.spec, case)[1]
+                coverage_delta(
+                    requirement_columns,
+                    candidate.spec,
+                    case,
+                    enforce_delta=enforce_delta,
+                )[1]
                 for case in assigned_cases
             )
             total_delta += assigned_delta
@@ -845,6 +973,10 @@ def main() -> int:
     second_pass_output_path = Path(args.second_pass_output)
     if args.max_tc_per_spec <= 0:
         raise SystemExit("--max-tc-per-spec must be positive")
+    if args.second_pass_max_du <= 0:
+        raise SystemExit("--second-pass-max-du must be positive")
+    if args.second_pass_max_ru <= 0:
+        raise SystemExit("--second-pass-max-ru must be positive")
     if output_path == second_pass_output_path:
         raise SystemExit("--output and --second-pass-output must be different paths")
 
@@ -892,6 +1024,12 @@ def main() -> int:
         solve_status,
     )
 
+    validate_second_pass_case_limits(
+        requirement_columns,
+        cases,
+        args.second_pass_max_du,
+        args.second_pass_max_ru,
+    )
     second_pass_candidates = generate_second_pass_candidates(
         requirement_columns=requirement_columns,
         cases=cases,
@@ -900,7 +1038,13 @@ def main() -> int:
         assignment_by_case=assignment_by_case,
         max_merge_candidates=max(1, args.max_candidates_per_bucket),
         max_cover_checks=max(0, args.max_cover_checks_per_candidate),
+        max_du=args.second_pass_max_du,
+        max_ru=args.second_pass_max_ru,
     )
+    if not second_pass_candidates:
+        raise SystemExit(
+            "no second-pass candidates satisfy the configured DU/RU limits"
+        )
     second_pass_candidates = expand_candidates_for_capacity(
         second_pass_candidates, args.max_tc_per_spec
     )
@@ -918,6 +1062,9 @@ def main() -> int:
         second_selected,
         second_assignment,
         args.max_tc_per_spec,
+        enforce_delta=False,
+        max_du=args.second_pass_max_du,
+        max_ru=args.second_pass_max_ru,
     )
     (
         second_spec_count,
@@ -934,6 +1081,7 @@ def main() -> int:
         second_selected,
         second_assignment,
         second_status,
+        enforce_delta=False,
     )
 
     elapsed = time.monotonic() - started_at
