@@ -12,9 +12,15 @@ test line specs to `output_specs.csv`. The script is intentionally standalone:
 all project-specific rules live in this file so it can be run directly from the
 project folder.
 
+Every run must also provide an RU-band support table:
+
+```text
+python solve_test_lines.py --ru-band-support ru_band_support.csv
+```
+
 ## CSV Parsing
 
-Cells are parsed as token lists separated by plus signs, regardless of surrounding whitespace:
+Cells are parsed as AND slots separated by plus signs, regardless of surrounding whitespace:
 
 ```text
 a + b
@@ -23,6 +29,14 @@ a + b
 The solver accepts inconsistent separator spacing such as `a +b`, `a+ b`, and
 `a+b`. A plus sign is always a separator; capability names containing `+` are
 not supported.
+
+Alternatives within one slot are separated by `/`:
+
+```text
+rf1234/rf1235 + any
+```
+
+This means `(rf1234 or rf1235) and any`. Whitespace around `/` is optional.
 
 Blank cells mean no requirement. The literal value `null` is treated as a real
 requirement value.
@@ -37,8 +51,47 @@ Examples:
 - `any + any` requires two matching slots.
 - `any + volte` requires one arbitrary slot and one concrete `volte` slot.
 
-When generating a merged spec, the solver keeps `any` only when there are not
-enough concrete values to satisfy the required number of slots.
+During column merging, the solver keeps `any` only when there are not enough
+concrete values to satisfy the required number of slots. The RU-band
+compatibility phase then resolves RU/LTE/NR wildcard slots before optimization.
+
+## RU-Band Support
+
+`--ru-band-support` is required. The CSV must contain:
+
+```text
+ru,lte_band,nr_band
+rf-1001,b1 + b3,n41/n78
+```
+
+Each row identifies one concrete RU. LTE and NR cells list every band supported
+by that RU; both `+` and `/` are treated as union separators in this table.
+Repeated RU rows are unioned. Matching is case-insensitive, while emitted values
+use the spelling first seen in the table.
+
+Blank band cells are allowed. Blank or `any` RU names, `any` bands, and
+`intra`/`inter` relationship tokens are rejected in the support table.
+
+Before candidate generation, every concrete RU and LTE/NR band referenced by
+the testcase input must exist in the support table. Missing values stop the run
+with a list of unknown RUs or bands.
+
+For non-empty `ru`, `lte band`, and `nr band` requirements, wildcard slots are
+resolved to concrete support-table values:
+
+- `lte band=b1, ru=any` selects an RU that supports `b1`.
+- `lte band=any, ru=rf-1001` selects an LTE band supported by `rf-1001`.
+- when both are `any`, the solver generates concrete compatible pairs.
+- NR uses the same rules.
+
+Blank requirement cells remain blank. Existing concrete `/` alternatives and
+slot counts are preserved. For specs with multiple RUs and bands, every
+concrete band slot must have at least one alternative supported by at least one
+selected RU alternative. One RU may support multiple bands.
+
+Wildcard expansion is deterministic and bounded per merged candidate. Exact
+testcase rows are expanded independently, so a testcase with no compatible
+concrete realization is reported before optimization.
 
 ## Delta Rule
 
@@ -48,11 +101,6 @@ token beyond that testcase requirement.
 This keeps specs from becoming broad catch-all lines while still allowing useful
 merges. The delta is calculated per column, then summed for optimization and
 reporting.
-
-This restriction applies to the primary pass only. The second pass removes the
-delta limit so compatible first-pass lines can be consolidated more
-aggressively. Concrete requirements, slot cardinality, band relationships, and
-single-select rules still apply.
 
 ## Single-Select Columns
 
@@ -162,38 +210,6 @@ The objective is lexicographic and solved in stages:
 The implementation uses staged solves instead of one huge weighted objective to
 avoid integer overflow and weight-tuning problems on large candidate pools.
 
-## Second Pass
-
-After writing the primary output, the solver creates a bounded pool containing
-the selected first-pass specs and compatible pair merges. Pair attempts start
-with the smallest assigned spec and the largest assigned specs so underused
-lines are preferentially consolidated into highly utilized lines. Successful
-merge candidates are capped by `--max-candidates-per-bucket`; pair attempts are
-also bounded to keep runtime practical when most specs are incompatible.
-
-The second pass prioritizes:
-
-1. Minimize selected spec count.
-2. Minimize assignment imbalance.
-3. Minimize maximum equipment count.
-4. Minimize total equipment count.
-5. Minimize total delta.
-
-The same testcase assignment limit and full solution verification apply. The
-result is written to `output_specs_second_pass.csv` by default and can be
-changed with `--second-pass-output`.
-
-Every second-pass spec is also limited to:
-
-- DU total at most 4, calculated as the numeric sum of `enb`, `vdu`, `au`, and
-  `cu`;
-- RU total at most 4, calculated as the number of slots in `ru`.
-
-The defaults can be changed with `--second-pass-max-du` and
-`--second-pass-max-ru`. Exact-row candidates are retained in the second-pass
-pool to preserve feasibility. If an individual testcase itself exceeds either
-limit, the solver exits with that testcase ID and its required DU/RU counts.
-
 ## Timeout Behavior
 
 The default timeout is 600 seconds.
@@ -258,6 +274,10 @@ Completely unbounded random values would produce mostly unmergeable rows and
 would not exercise the optimizer meaningfully.
 
 Approximately 50% of generated values are `any`, as requested.
+
+Concrete RU requirements give each slot a 30% chance of containing two
+alternatives separated by `/`. The number of RU slots is still determined by
+the existing variation-dependent width distribution.
 
 UE capability generation uses:
 

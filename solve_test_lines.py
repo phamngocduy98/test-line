@@ -15,6 +15,7 @@ import re
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from itertools import product
 from pathlib import Path
 from typing import Iterable
 
@@ -26,6 +27,7 @@ DU_COLUMNS = ("enb", "vdu", "au", "cu")
 RU_COLUMN = "ru"
 UE_COLUMN = "ue"
 NUMERIC_EQUIPMENT_COLUMNS = set(DU_COLUMNS) | {UE_COLUMN}
+DEFAULT_MAX_COMPATIBILITY_VARIANTS = 64
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,15 @@ class Candidate:
     signature: tuple[tuple[str, tuple[str, ...]], ...]
 
 
+@dataclass(frozen=True)
+class RuBandSupport:
+    ru_names: dict[str, str]
+    lte_band_names: dict[str, str]
+    nr_band_names: dict[str, str]
+    lte_by_ru: dict[str, frozenset[str]]
+    nr_by_ru: dict[str, frozenset[str]]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Optimize telecom test line specs from testcase requirements."
@@ -52,9 +63,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", default="input.csv", help="Input testcase CSV path.")
     parser.add_argument("--output", default="output_specs.csv", help="Output specs CSV path.")
     parser.add_argument(
-        "--second-pass-output",
-        default="output_specs_second_pass.csv",
-        help="Second-pass merged specs CSV path. Default: output_specs_second_pass.csv.",
+        "--ru-band-support",
+        required=True,
+        help="Required CSV mapping RUs to supported LTE and NR bands.",
     )
     parser.add_argument(
         "--timeout",
@@ -91,18 +102,6 @@ def parse_args() -> argparse.Namespace:
         default=338,
         help="Maximum assigned testcases per selected spec. Default: 338.",
     )
-    parser.add_argument(
-        "--second-pass-max-du",
-        type=int,
-        default=4,
-        help="Maximum total DU equipment in a second-pass spec. Default: 4.",
-    )
-    parser.add_argument(
-        "--second-pass-max-ru",
-        type=int,
-        default=4,
-        help="Maximum RU slots in a second-pass spec. Default: 4.",
-    )
     return parser.parse_args()
 
 
@@ -114,7 +113,12 @@ def is_temporarily_ignored_column(column: str) -> bool:
 def parse_cell(value: str | None) -> tuple[str, ...]:
     if value is None or value == "":
         return ()
-    return tuple(part.strip() for part in re.split(r"\s*\+\s*", value) if part.strip())
+    slots: list[str] = []
+    for part in re.split(r"\s*\+\s*", value):
+        alternatives = [item.strip() for item in re.split(r"\s*/\s*", part) if item.strip()]
+        if alternatives:
+            slots.append("/".join(dict.fromkeys(alternatives)))
+    return tuple(slots)
 
 
 def render_cell(tokens: Iterable[str]) -> str:
@@ -122,7 +126,50 @@ def render_cell(tokens: Iterable[str]) -> str:
 
 
 def is_any(token: str) -> bool:
-    return token.lower() == ANY
+    return ANY in {alternative.lower() for alternative in token.split("/")}
+
+
+def alternatives(token: str) -> frozenset[str]:
+    return frozenset(part.lower() for part in token.split("/"))
+
+
+def slots_cover(spec_tokens: tuple[str, ...], case_tokens: tuple[str, ...]) -> bool:
+    if len(spec_tokens) < len(case_tokens):
+        return False
+
+    compatible_specs = []
+    for case_token in case_tokens:
+        matches = []
+        for index, spec_token in enumerate(spec_tokens):
+            if (
+                is_any(case_token)
+                or is_any(spec_token)
+                or alternatives(case_token) & alternatives(spec_token)
+            ):
+                matches.append(index)
+        if not matches:
+            return False
+        compatible_specs.append(matches)
+
+    matched_cases: dict[int, int] = {}
+
+    def assign(case_index: int, seen: set[int]) -> bool:
+        for spec_index in compatible_specs[case_index]:
+            if spec_index in seen:
+                continue
+            seen.add(spec_index)
+            previous_case = matched_cases.get(spec_index)
+            if previous_case is None or assign(previous_case, seen):
+                matched_cases[spec_index] = case_index
+                return True
+        return False
+
+    for case_index in sorted(
+        range(len(case_tokens)), key=lambda index: len(compatible_specs[index])
+    ):
+        if not assign(case_index, set()):
+            return False
+    return True
 
 
 def any_count(tokens: Iterable[str]) -> int:
@@ -168,18 +215,130 @@ def load_cases(path: Path) -> tuple[list[str], list[TestCase]]:
     return columns, cases
 
 
+def _support_values(value: str | None, column: str, row_number: int) -> list[str]:
+    values: list[str] = []
+    for token in parse_cell(value):
+        for item in token.split("/"):
+            normalized = item.strip().lower()
+            if normalized == ANY or normalized in RELATION_TOKENS:
+                raise SystemExit(
+                    f"invalid {column} value {item!r} in RU support row {row_number}"
+                )
+            values.append(item.strip())
+    return values
+
+
+def load_ru_band_support(path: Path) -> RuBandSupport:
+    with path.open(newline="", encoding="utf-8-sig") as handle:
+        reader = csv.DictReader(handle)
+        required = {"ru", "lte_band", "nr_band"}
+        if not reader.fieldnames or not required.issubset(reader.fieldnames):
+            raise SystemExit(
+                f"{path} must contain columns: ru,lte_band,nr_band"
+            )
+        rows = list(reader)
+
+    ru_names: dict[str, str] = {}
+    lte_band_names: dict[str, str] = {}
+    nr_band_names: dict[str, str] = {}
+    lte_by_ru: dict[str, set[str]] = defaultdict(set)
+    nr_by_ru: dict[str, set[str]] = defaultdict(set)
+
+    for row_number, row in enumerate(rows, start=2):
+        ru_tokens = parse_cell(row.get("ru"))
+        if (
+            len(ru_tokens) != 1
+            or is_any(ru_tokens[0])
+            or len(alternatives(ru_tokens[0])) != 1
+            or ru_tokens[0].lower() in RELATION_TOKENS
+        ):
+            raise SystemExit(
+                f"RU support row {row_number} must contain one concrete ru value"
+            )
+        ru_name = ru_tokens[0].strip()
+        ru_key = ru_name.lower()
+        ru_names.setdefault(ru_key, ru_name)
+
+        for band_name in _support_values(row.get("lte_band"), "lte_band", row_number):
+            band_key = band_name.lower()
+            lte_band_names.setdefault(band_key, band_name)
+            lte_by_ru[ru_key].add(band_key)
+        for band_name in _support_values(row.get("nr_band"), "nr_band", row_number):
+            band_key = band_name.lower()
+            nr_band_names.setdefault(band_key, band_name)
+            nr_by_ru[ru_key].add(band_key)
+
+    if not ru_names:
+        raise SystemExit(f"{path} has no RU support rows")
+
+    return RuBandSupport(
+        ru_names=ru_names,
+        lte_band_names=lte_band_names,
+        nr_band_names=nr_band_names,
+        lte_by_ru={
+            ru: frozenset(lte_by_ru.get(ru, set())) for ru in ru_names
+        },
+        nr_by_ru={
+            ru: frozenset(nr_by_ru.get(ru, set())) for ru in ru_names
+        },
+    )
+
+
+def validate_support_references(
+    requirement_columns: list[str],
+    cases: list[TestCase],
+    support: RuBandSupport,
+) -> None:
+    unknown_rus: set[str] = set()
+    unknown_lte: set[str] = set()
+    unknown_nr: set[str] = set()
+
+    for case in cases:
+        if RU_COLUMN in requirement_columns:
+            for token in case.tokens[RU_COLUMN]:
+                unknown_rus.update(
+                    value
+                    for value in alternatives(token) - {ANY}
+                    if value not in support.ru_names
+                )
+        for column, names, unknown in (
+            ("lte band", support.lte_band_names, unknown_lte),
+            ("nr band", support.nr_band_names, unknown_nr),
+        ):
+            if column not in requirement_columns:
+                continue
+            for token in case.tokens[column]:
+                unknown.update(
+                    value
+                    for value in alternatives(token) - RELATION_TOKENS - {ANY}
+                    if value not in names
+                )
+
+    messages = []
+    if unknown_rus:
+        messages.append(f"unknown RUs: {', '.join(sorted(unknown_rus))}")
+    if unknown_lte:
+        messages.append(f"unknown LTE bands: {', '.join(sorted(unknown_lte))}")
+    if unknown_nr:
+        messages.append(f"unknown NR bands: {', '.join(sorted(unknown_nr))}")
+    if messages:
+        raise SystemExit("RU support table is incomplete; " + "; ".join(messages))
+
+
 def split_band_tokens(tokens: Iterable[str]) -> tuple[list[str], set[str], int]:
     bands: list[str] = []
     relations: set[str] = set()
     anys = 0
     for token in tokens:
-        lower = token.lower()
         if is_any(token):
             anys += 1
-        elif lower in RELATION_TOKENS:
-            relations.add(lower)
-        else:
-            bands.append(token)
+            continue
+        options = alternatives(token)
+        relation_options = options & RELATION_TOKENS
+        band_options = options - RELATION_TOKENS
+        relations.update(relation_options)
+        if band_options:
+            bands.append("/".join(sorted(band_options)))
     return bands, relations, anys
 
 
@@ -194,6 +353,163 @@ def relation_satisfied(tokens: tuple[str, ...], relation: str) -> bool:
     if relation == "inter":
         return bool(anys or len(set(bands)) >= 2)
     return False
+
+
+def _selected_ru_keys(tokens: tuple[str, ...]) -> set[str]:
+    return {
+        value
+        for token in tokens
+        if not is_any(token)
+        for value in alternatives(token)
+    }
+
+
+def _replace_any_alternative(token: str, replacement: str) -> str:
+    parts = [
+        part.strip()
+        for part in token.split("/")
+        if part.strip() and part.strip().lower() != ANY
+    ]
+    parts.append(replacement)
+    unique: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        normalized = part.lower()
+        if normalized not in seen:
+            seen.add(normalized)
+            unique.append(part)
+    return "/".join(unique)
+
+
+def spec_has_compatible_ru_bands(
+    spec: dict[str, tuple[str, ...]], support: RuBandSupport
+) -> bool:
+    ru_tokens = spec.get(RU_COLUMN, ())
+    if not ru_tokens:
+        return True
+    if any(is_any(token) for token in ru_tokens):
+        return False
+
+    selected_rus = _selected_ru_keys(ru_tokens)
+    if not selected_rus or not selected_rus.issubset(support.ru_names):
+        return False
+
+    for column, support_by_ru in (
+        ("lte band", support.lte_by_ru),
+        ("nr band", support.nr_by_ru),
+    ):
+        band_tokens = spec.get(column, ())
+        if not band_tokens:
+            continue
+        supported_bands = set().union(
+            *(support_by_ru.get(ru, frozenset()) for ru in selected_rus)
+        )
+        for token in band_tokens:
+            if is_any(token):
+                return False
+            band_options = alternatives(token) - RELATION_TOKENS
+            if band_options and not band_options.intersection(supported_bands):
+                return False
+    return True
+
+
+def resolve_compatibility_variants(
+    spec: dict[str, tuple[str, ...]],
+    support: RuBandSupport,
+    max_variants: int = DEFAULT_MAX_COMPATIBILITY_VARIANTS,
+) -> list[dict[str, tuple[str, ...]]]:
+    max_variants = max(1, max_variants)
+    ru_tokens = spec.get(RU_COLUMN, ())
+    ru_domains: list[tuple[str, ...]] = []
+    for token in ru_tokens:
+        if is_any(token):
+            ru_domains.append(
+                tuple(
+                    _replace_any_alternative(token, support.ru_names[key])
+                    for key in sorted(support.ru_names)
+                )
+            )
+        else:
+            ru_domains.append((token,))
+
+    ru_assignments = product(*ru_domains) if ru_domains else [()]
+    variants: list[dict[str, tuple[str, ...]]] = []
+    seen: set[tuple[tuple[str, tuple[str, ...]], ...]] = set()
+
+    for ru_assignment in ru_assignments:
+        selected_rus = _selected_ru_keys(tuple(ru_assignment))
+        band_domains_by_column: list[tuple[str, list[tuple[str, ...]]]] = []
+        feasible = True
+
+        for column, names, support_by_ru in (
+            ("lte band", support.lte_band_names, support.lte_by_ru),
+            ("nr band", support.nr_band_names, support.nr_by_ru),
+        ):
+            tokens = spec.get(column, ())
+            supported_bands = (
+                set().union(
+                    *(support_by_ru.get(ru, frozenset()) for ru in selected_rus)
+                )
+                if selected_rus
+                else set(names)
+            )
+            token_domains: list[tuple[str, ...]] = []
+            for token in tokens:
+                if is_any(token):
+                    choices = tuple(
+                        _replace_any_alternative(token, names[key])
+                        for key in sorted(supported_bands)
+                        if key in names
+                    )
+                    if not choices:
+                        feasible = False
+                        break
+                    token_domains.append(choices)
+                    continue
+                band_options = alternatives(token) - RELATION_TOKENS
+                if (
+                    selected_rus
+                    and band_options
+                    and not band_options.intersection(supported_bands)
+                ):
+                    feasible = False
+                    break
+                token_domains.append((token,))
+            if not feasible:
+                break
+            band_domains_by_column.append((column, token_domains))
+
+        if not feasible:
+            continue
+
+        flattened_domains = [
+            domain
+            for _, token_domains in band_domains_by_column
+            for domain in token_domains
+        ]
+        band_assignments = product(*flattened_domains) if flattened_domains else [()]
+        for band_assignment in band_assignments:
+            variant = dict(spec)
+            if ru_tokens:
+                variant[RU_COLUMN] = tuple(ru_assignment)
+            offset = 0
+            for column, token_domains in band_domains_by_column:
+                count = len(token_domains)
+                if column in spec:
+                    variant[column] = tuple(band_assignment[offset : offset + count])
+                offset += count
+
+            if not spec_has_compatible_ru_bands(variant, support):
+                continue
+            signature = spec_signature(variant)
+            if signature in seen:
+                continue
+            seen.add(signature)
+            variants.append(variant)
+            if len(variants) >= max_variants:
+                return variants
+
+    return variants
 
 
 def covers_column(
@@ -230,12 +546,10 @@ def covers_column(
                     return False, 0
         case_bands, _, _ = split_band_tokens(case_tokens)
         spec_bands, _, _ = split_band_tokens(spec_tokens)
-        if Counter(case_bands) - Counter(spec_bands):
+        if not slots_cover(tuple(spec_bands), tuple(case_bands)):
             return False, 0
     else:
-        required_concrete = Counter(concrete_tokens(case_tokens))
-        spec_concrete = Counter(concrete_tokens(spec_tokens))
-        if required_concrete - spec_concrete:
+        if not slots_cover(spec_tokens, case_tokens):
             return False, 0
 
     required_slots = len(concrete_tokens(case_tokens)) + any_count(case_tokens)
@@ -256,7 +570,10 @@ def coverage_delta(
     candidate_spec: dict[str, tuple[str, ...]],
     case: TestCase,
     enforce_delta: bool = True,
+    support: RuBandSupport | None = None,
 ) -> tuple[bool, int]:
+    if support is not None and not spec_has_compatible_ru_bands(candidate_spec, support):
+        return False, 0
     total_delta = 0
     for column in requirement_columns:
         ok, delta = covers_column(
@@ -353,57 +670,6 @@ def equipment_count(requirement_columns: list[str], spec: dict[str, tuple[str, .
     return total
 
 
-def du_equipment_count(
-    requirement_columns: list[str], spec: dict[str, tuple[str, ...]]
-) -> int:
-    return sum(
-        numeric_equipment(spec[column])
-        for column in DU_COLUMNS
-        if column in requirement_columns
-    )
-
-
-def ru_equipment_count(
-    requirement_columns: list[str], spec: dict[str, tuple[str, ...]]
-) -> int:
-    if RU_COLUMN not in requirement_columns:
-        return 0
-    return len(spec[RU_COLUMN])
-
-
-def within_second_pass_equipment_limits(
-    requirement_columns: list[str],
-    spec: dict[str, tuple[str, ...]],
-    max_du: int,
-    max_ru: int,
-) -> bool:
-    return (
-        du_equipment_count(requirement_columns, spec) <= max_du
-        and ru_equipment_count(requirement_columns, spec) <= max_ru
-    )
-
-
-def validate_second_pass_case_limits(
-    requirement_columns: list[str],
-    cases: list[TestCase],
-    max_du: int,
-    max_ru: int,
-) -> None:
-    for case in cases:
-        spec = merge_cases(requirement_columns, [case])
-        if spec is None:
-            raise SystemExit(
-                f"testcase {case.tc_id} cannot form a valid second-pass spec"
-            )
-        du_count = du_equipment_count(requirement_columns, spec)
-        ru_count = ru_equipment_count(requirement_columns, spec)
-        if du_count > max_du or ru_count > max_ru:
-            raise SystemExit(
-                f"testcase {case.tc_id} exceeds second-pass equipment limits "
-                f"(DU={du_count}/{max_du}, RU={ru_count}/{max_ru})"
-            )
-
-
 def spec_signature(spec: dict[str, tuple[str, ...]]) -> tuple[tuple[str, tuple[str, ...]], ...]:
     return tuple((column, spec[column]) for column in sorted(spec))
 
@@ -440,23 +706,30 @@ def coarse_signature(requirement_columns: list[str], case: TestCase, include_equ
     return tuple(parts)
 
 
-def build_candidate(
+def build_candidate_variants(
     requirement_columns: list[str],
     cases: list[TestCase],
     indices: Iterable[int],
     all_cases: list[TestCase],
     max_cover_checks: int,
     enforce_delta: bool = True,
-) -> Candidate | None:
+    support: RuBandSupport | None = None,
+    max_compatibility_variants: int = DEFAULT_MAX_COMPATIBILITY_VARIANTS,
+) -> list[Candidate]:
     index_tuple = tuple(sorted(set(indices)))
     if not index_tuple:
-        return None
-    spec = merge_cases(requirement_columns, (cases[index] for index in index_tuple))
-    if spec is None:
-        return None
+        return []
+    merged_spec = merge_cases(requirement_columns, (cases[index] for index in index_tuple))
+    if merged_spec is None:
+        return []
+    specs = (
+        resolve_compatibility_variants(
+            merged_spec, support, max_variants=max_compatibility_variants
+        )
+        if support is not None
+        else [merged_spec]
+    )
 
-    covered: list[int] = []
-    deltas: list[int] = []
     check_cases = all_cases
     if max_cover_checks > 0 and len(all_cases) > max_cover_checks:
         seed = list(index_tuple)
@@ -464,35 +737,75 @@ def build_candidate(
         selected = seed + others[: max(0, max_cover_checks - len(seed))]
         check_cases = [all_cases[index] for index in selected]
 
-    for case in check_cases:
-        ok, delta = coverage_delta(
-            requirement_columns, spec, case, enforce_delta=enforce_delta
-        )
-        if ok:
-            covered.append(case.index)
-            deltas.append(delta)
+    candidates: list[Candidate] = []
+    for spec in specs:
+        covered: list[int] = []
+        deltas: list[int] = []
+        for case in check_cases:
+            ok, delta = coverage_delta(
+                requirement_columns,
+                spec,
+                case,
+                enforce_delta=enforce_delta,
+                support=support,
+            )
+            if ok:
+                covered.append(case.index)
+                deltas.append(delta)
 
-    for index in index_tuple:
-        if index not in covered:
+        seed_is_covered = True
+        for index in index_tuple:
+            if index in covered:
+                continue
             ok, delta = coverage_delta(
                 requirement_columns,
                 spec,
                 all_cases[index],
                 enforce_delta=enforce_delta,
+                support=support,
             )
             if not ok:
-                return None
+                seed_is_covered = False
+                break
             covered.append(index)
             deltas.append(delta)
+        if not seed_is_covered:
+            continue
 
-    signature = spec_signature(spec)
-    return Candidate(
-        spec=spec,
-        covered=tuple(covered),
-        deltas=tuple(deltas),
-        equipment_count=equipment_count(requirement_columns, spec),
-        signature=signature,
+        signature = spec_signature(spec)
+        candidates.append(
+            Candidate(
+                spec=spec,
+                covered=tuple(covered),
+                deltas=tuple(deltas),
+                equipment_count=equipment_count(requirement_columns, spec),
+                signature=signature,
+            )
+        )
+    return candidates
+
+
+def build_candidate(
+    requirement_columns: list[str],
+    cases: list[TestCase],
+    indices: Iterable[int],
+    all_cases: list[TestCase],
+    max_cover_checks: int,
+    enforce_delta: bool = True,
+    support: RuBandSupport | None = None,
+    max_compatibility_variants: int = DEFAULT_MAX_COMPATIBILITY_VARIANTS,
+) -> Candidate | None:
+    variants = build_candidate_variants(
+        requirement_columns,
+        cases,
+        indices,
+        all_cases,
+        max_cover_checks,
+        enforce_delta=enforce_delta,
+        support=support,
+        max_compatibility_variants=max_compatibility_variants,
     )
+    return variants[0] if variants else None
 
 
 def add_candidate(
@@ -528,14 +841,26 @@ def generate_candidates(
     cases: list[TestCase],
     max_candidates_per_bucket: int,
     max_cover_checks: int,
+    support: RuBandSupport | None = None,
 ) -> list[Candidate]:
     candidates: dict[tuple[tuple[str, tuple[str, ...]], ...], Candidate] = {}
 
     for case in cases:
-        add_candidate(
-            candidates,
-            build_candidate(requirement_columns, cases, [case.index], cases, max_cover_checks),
+        exact_variants = build_candidate_variants(
+            requirement_columns,
+            cases,
+            [case.index],
+            cases,
+            max_cover_checks,
+            support=support,
+            max_compatibility_variants=max_candidates_per_bucket,
         )
+        if support is not None and not exact_variants:
+            raise SystemExit(
+                f"testcase {case.tc_id} has no compatible RU-band realization"
+            )
+        for candidate in exact_variants:
+            add_candidate(candidates, candidate)
 
     bucket_map: dict[tuple, list[TestCase]] = defaultdict(list)
     for case in cases:
@@ -550,16 +875,16 @@ def generate_candidates(
             ),
         )
         if len(sorted_bucket) > 1:
-            add_candidate(
-                candidates,
-                build_candidate(
+            for candidate in build_candidate_variants(
                     requirement_columns,
                     cases,
                     [case.index for case in sorted_bucket],
                     cases,
                     max_cover_checks,
-                ),
-            )
+                    support=support,
+                    max_compatibility_variants=max_candidates_per_bucket,
+                ):
+                add_candidate(candidates, candidate)
 
         for window_size in (2, 3, 5, 8, 13, 21, 34, 55):
             if window_size > len(sorted_bucket):
@@ -567,16 +892,16 @@ def generate_candidates(
             made = 0
             step = max(1, window_size // 2)
             for start in range(0, len(sorted_bucket) - window_size + 1, step):
-                add_candidate(
-                    candidates,
-                    build_candidate(
+                for candidate in build_candidate_variants(
                         requirement_columns,
                         cases,
                         [case.index for case in sorted_bucket[start : start + window_size]],
                         cases,
                         max_cover_checks,
-                    ),
-                )
+                        support=support,
+                        max_compatibility_variants=max_candidates_per_bucket,
+                    ):
+                    add_candidate(candidates, candidate)
                 made += 1
                 if made >= max_candidates_per_bucket:
                     break
@@ -592,16 +917,16 @@ def generate_candidates(
         )
         for group in ranked_groups[:max_candidates_per_bucket]:
             if len(group) > 1:
-                add_candidate(
-                    candidates,
-                    build_candidate(
+                for candidate in build_candidate_variants(
                         requirement_columns,
                         cases,
                         [case.index for case in group],
                         cases,
                         max_cover_checks,
-                    ),
-                )
+                        support=support,
+                        max_compatibility_variants=max_candidates_per_bucket,
+                    ):
+                    add_candidate(candidates, candidate)
 
     return sorted(
         candidates.values(),
@@ -629,7 +954,6 @@ def solve_with_ortools(
     cases: list[TestCase],
     timeout_seconds: float,
     max_tc_per_spec: int,
-    utilization_first: bool = False,
 ) -> tuple[str, list[int], dict[int, int]]:
     try:
         from ortools.sat.python import cp_model
@@ -692,22 +1016,13 @@ def solve_with_ortools(
     solver.parameters.num_search_workers = max(1, min(8, os.cpu_count() or 8))
     started_at = time.monotonic()
 
-    if utilization_first:
-        objectives = (
-            selected_count,
-            imbalance,
-            max_equipment,
-            total_equipment,
-            total_delta,
-        )
-    else:
-        objectives = (
-            max_equipment,
-            total_equipment,
-            selected_count,
-            imbalance,
-            total_delta,
-        )
+    objectives = (
+        max_equipment,
+        total_equipment,
+        selected_count,
+        imbalance,
+        total_delta,
+    )
     solve_status = "OPTIMAL"
     status = None
     for objective in objectives:
@@ -740,8 +1055,7 @@ def validate_solution(
     assignment_by_case: dict[int, int],
     max_tc_per_spec: int,
     enforce_delta: bool = True,
-    max_du: int | None = None,
-    max_ru: int | None = None,
+    support: RuBandSupport | None = None,
 ) -> None:
     if set(assignment_by_case) != {case.index for case in cases}:
         raise SystemExit("verification failed: every testcase must be assigned exactly once")
@@ -761,6 +1075,7 @@ def validate_solution(
             candidate.spec,
             case,
             enforce_delta=enforce_delta,
+            support=support,
         )
         if not ok:
             raise SystemExit(f"verification failed: testcase {case.tc_id} is not covered")
@@ -771,121 +1086,10 @@ def validate_solution(
                     raise SystemExit(f"verification failed: {column} has multiple concrete values")
         if candidate.equipment_count != equipment_count(requirement_columns, candidate.spec):
             raise SystemExit("verification failed: equipment count mismatch")
-        if (
-            max_du is not None
-            and max_ru is not None
-            and not within_second_pass_equipment_limits(
-                requirement_columns, candidate.spec, max_du, max_ru
-            )
+        if support is not None and not spec_has_compatible_ru_bands(
+            candidate.spec, support
         ):
-            raise SystemExit("verification failed: second-pass DU/RU limit exceeded")
-
-
-def generate_second_pass_candidates(
-    requirement_columns: list[str],
-    cases: list[TestCase],
-    first_candidates: list[Candidate],
-    selected_indices: list[int],
-    assignment_by_case: dict[int, int],
-    max_merge_candidates: int,
-    max_cover_checks: int,
-    max_du: int,
-    max_ru: int,
-) -> list[Candidate]:
-    candidates_by_signature: dict[
-        tuple[tuple[str, tuple[str, ...]], ...], Candidate
-    ] = {}
-    for candidate_index in selected_indices:
-        candidate = first_candidates[candidate_index]
-        if within_second_pass_equipment_limits(
-            requirement_columns, candidate.spec, max_du, max_ru
-        ):
-            add_candidate(candidates_by_signature, candidate)
-
-    for case in cases:
-        add_candidate(
-            candidates_by_signature,
-            build_candidate(
-                requirement_columns,
-                cases,
-                [case.index],
-                cases,
-                max_cover_checks,
-                enforce_delta=False,
-            ),
-        )
-
-    assigned_by_candidate: dict[int, list[int]] = defaultdict(list)
-    for case_index, candidate_index in assignment_by_case.items():
-        assigned_by_candidate[candidate_index].append(case_index)
-
-    selected_sorted = sorted(
-        selected_indices,
-        key=lambda index: (
-            len(assigned_by_candidate[index]),
-            first_candidates[index].equipment_count,
-            index,
-        ),
-    )
-    generated = 0
-    attempted = 0
-    max_attempts = max_merge_candidates * 20
-    for left, first_index in enumerate(selected_sorted):
-        for right in range(len(selected_sorted) - 1, left, -1):
-            attempted += 1
-            if attempted > max_attempts:
-                return sorted(
-                    candidates_by_signature.values(),
-                    key=lambda item: (
-                        item.equipment_count,
-                        -len(item.covered),
-                        sum(item.deltas),
-                        item.signature,
-                    ),
-                )
-            second_index = selected_sorted[right]
-            seed_indices = (
-                assigned_by_candidate[first_index]
-                + assigned_by_candidate[second_index]
-            )
-            candidate = build_candidate(
-                requirement_columns,
-                cases,
-                seed_indices,
-                cases,
-                max_cover_checks,
-                enforce_delta=False,
-            )
-            if candidate is None:
-                continue
-            if not within_second_pass_equipment_limits(
-                requirement_columns, candidate.spec, max_du, max_ru
-            ):
-                continue
-            before = len(candidates_by_signature)
-            add_candidate(candidates_by_signature, candidate)
-            if len(candidates_by_signature) > before:
-                generated += 1
-                if generated >= max_merge_candidates:
-                    return sorted(
-                        candidates_by_signature.values(),
-                        key=lambda item: (
-                            item.equipment_count,
-                            -len(item.covered),
-                            sum(item.deltas),
-                            item.signature,
-                        ),
-                    )
-
-    return sorted(
-        candidates_by_signature.values(),
-        key=lambda candidate: (
-            candidate.equipment_count,
-            -len(candidate.covered),
-            sum(candidate.deltas),
-            candidate.signature,
-        ),
-    )
+            raise SystemExit("verification failed: incompatible RU-band spec")
 
 
 def write_output(
@@ -898,6 +1102,7 @@ def write_output(
     assignment_by_case: dict[int, int],
     solve_status: str,
     enforce_delta: bool = True,
+    support: RuBandSupport | None = None,
 ) -> tuple[int, int, int, int, list[int]]:
     assignments_by_candidate: dict[int, list[TestCase]] = defaultdict(list)
     for case in cases:
@@ -939,6 +1144,7 @@ def write_output(
                     candidate.spec,
                     case,
                     enforce_delta=enforce_delta,
+                    support=support,
                 )[1]
                 for case in assigned_cases
             )
@@ -970,17 +1176,12 @@ def main() -> int:
     started_at = time.monotonic()
     input_path = Path(args.input)
     output_path = Path(args.output)
-    second_pass_output_path = Path(args.second_pass_output)
+    support_path = Path(args.ru_band_support)
     if args.max_tc_per_spec <= 0:
         raise SystemExit("--max-tc-per-spec must be positive")
-    if args.second_pass_max_du <= 0:
-        raise SystemExit("--second-pass-max-du must be positive")
-    if args.second_pass_max_ru <= 0:
-        raise SystemExit("--second-pass-max-ru must be positive")
-    if output_path == second_pass_output_path:
-        raise SystemExit("--output and --second-pass-output must be different paths")
 
     input_columns, cases = load_cases(input_path)
+    support = load_ru_band_support(support_path)
     requirement_columns = [column for column in input_columns if column != "tc_id"]
     if args.ignore_tech_and_ue_capa:
         requirement_columns = [
@@ -988,12 +1189,14 @@ def main() -> int:
             for column in requirement_columns
             if not is_temporarily_ignored_column(column)
         ]
+    validate_support_references(requirement_columns, cases, support)
 
     candidates = generate_candidates(
         requirement_columns=requirement_columns,
         cases=cases,
         max_candidates_per_bucket=max(1, args.max_candidates_per_bucket),
         max_cover_checks=max(0, args.max_cover_checks_per_candidate),
+        support=support,
     )
     if not candidates:
         raise SystemExit("no candidate specs generated")
@@ -1012,6 +1215,7 @@ def main() -> int:
         selected_indices,
         assignment_by_case,
         args.max_tc_per_spec,
+        support=support,
     )
     spec_count, max_equipment, total_equipment, total_delta, distribution = write_output(
         output_path,
@@ -1022,66 +1226,7 @@ def main() -> int:
         selected_indices,
         assignment_by_case,
         solve_status,
-    )
-
-    validate_second_pass_case_limits(
-        requirement_columns,
-        cases,
-        args.second_pass_max_du,
-        args.second_pass_max_ru,
-    )
-    second_pass_candidates = generate_second_pass_candidates(
-        requirement_columns=requirement_columns,
-        cases=cases,
-        first_candidates=candidates,
-        selected_indices=selected_indices,
-        assignment_by_case=assignment_by_case,
-        max_merge_candidates=max(1, args.max_candidates_per_bucket),
-        max_cover_checks=max(0, args.max_cover_checks_per_candidate),
-        max_du=args.second_pass_max_du,
-        max_ru=args.second_pass_max_ru,
-    )
-    if not second_pass_candidates:
-        raise SystemExit(
-            "no second-pass candidates satisfy the configured DU/RU limits"
-        )
-    second_pass_candidates = expand_candidates_for_capacity(
-        second_pass_candidates, args.max_tc_per_spec
-    )
-    second_status, second_selected, second_assignment = solve_with_ortools(
-        second_pass_candidates,
-        cases,
-        args.timeout,
-        args.max_tc_per_spec,
-        utilization_first=True,
-    )
-    validate_solution(
-        requirement_columns,
-        cases,
-        second_pass_candidates,
-        second_selected,
-        second_assignment,
-        args.max_tc_per_spec,
-        enforce_delta=False,
-        max_du=args.second_pass_max_du,
-        max_ru=args.second_pass_max_ru,
-    )
-    (
-        second_spec_count,
-        second_max_equipment,
-        second_total_equipment,
-        second_total_delta,
-        second_distribution,
-    ) = write_output(
-        second_pass_output_path,
-        input_columns,
-        requirement_columns,
-        cases,
-        second_pass_candidates,
-        second_selected,
-        second_assignment,
-        second_status,
-        enforce_delta=False,
+        support=support,
     )
 
     elapsed = time.monotonic() - started_at
@@ -1095,14 +1240,6 @@ def main() -> int:
     print(f"total_equipment={total_equipment}")
     print(f"total_delta={total_delta}")
     print(f"output={output_path}")
-    print(f"second_pass_status={second_status}")
-    print(f"second_pass_candidate_specs={len(second_pass_candidates)}")
-    print(f"second_pass_selected_specs={second_spec_count}")
-    print(f"second_pass_assignment_distribution={second_distribution}")
-    print(f"second_pass_max_equipment={second_max_equipment}")
-    print(f"second_pass_total_equipment={second_total_equipment}")
-    print(f"second_pass_total_delta={second_total_delta}")
-    print(f"second_pass_output={second_pass_output_path}")
     return 0
 
 

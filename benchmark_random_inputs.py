@@ -38,11 +38,12 @@ NR_BANDS = [f"n{i}" for i in (1, 3, 5, 7, 28, 41, 77, 78)]
 RU_VALUES = [f"rf-{i}" for i in range(1000, 1008)]
 CC_LOCATIONS = ["", "any", "intra cc", "inter cc"]
 CA_TYPES = ["non ca", "intra DU", "inter DU", "inter CU", "any"]
-RF_CONDITIONS = ["", "mobility", "peak 4 path", "cell edge", "handover", "null"]
-UE_LTE = ["emtc", "volte"]
+RF_CONDITIONS = ["", "mobility", "peak 2 path", "peak 4 path"]
+UE_LTE = ["emtc", "volte", "spid"]
 UE_NR = ["nr"]
-UE_SPECIAL = ["6cc", "s23", "s21"]
+UE_SPECIAL = ["", "", "", "", "", "6cc"] # small probably
 ANY_RATE = 0.50
+RU_OR_RATE = 0.30
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,9 +63,9 @@ def parse_args() -> argparse.Namespace:
         help="Solver output CSV path. Default: random_output_specs.csv",
     )
     parser.add_argument(
-        "--second-pass-output",
-        default="random_output_specs_second_pass.csv",
-        help="Second-pass solver output CSV path.",
+        "--ru-band-support",
+        default="random_ru_band_support.csv",
+        help="Generated RU support CSV path. Default: random_ru_band_support.csv",
     )
     parser.add_argument(
         "--solver",
@@ -99,18 +100,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=338,
         help="Passed through to solve_test_lines.py. Default: 338.",
-    )
-    parser.add_argument(
-        "--second-pass-max-du",
-        type=int,
-        default=4,
-        help="Passed through to solve_test_lines.py. Default: 4.",
-    )
-    parser.add_argument(
-        "--second-pass-max-ru",
-        type=int,
-        default=4,
-        help="Passed through to solve_test_lines.py. Default: 4.",
     )
     parser.add_argument(
         "--variation",
@@ -190,7 +179,16 @@ def sample_ru(rng: random.Random, variation: str) -> str:
     width = int(weighted_choice(rng, [(str(value), weight) for value, weight in width_weights]))
     if rng.random() < ANY_RATE:
         return join_tokens(["any"] * width)
-    return join_tokens(rng.sample(RU_VALUES, width))
+
+    primary_values = rng.sample(RU_VALUES, width)
+    slots = []
+    for primary in primary_values:
+        if rng.random() < RU_OR_RATE:
+            alternative = rng.choice([value for value in RU_VALUES if value != primary])
+            slots.append(f"{primary}/{alternative}")
+        else:
+            slots.append(primary)
+    return join_tokens(slots)
 
 
 def maybe_any(rng: random.Random, concrete: str) -> str:
@@ -281,6 +279,22 @@ def write_random_input(path: Path, rows: int, seed: int, variation: str) -> None
             writer.writerow(make_row(tc_id, rng, variation))
 
 
+def write_ru_band_support(path: Path) -> None:
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle, fieldnames=["ru", "lte_band", "nr_band"]
+        )
+        writer.writeheader()
+        for ru in RU_VALUES:
+            writer.writerow(
+                {
+                    "ru": ru,
+                    "lte_band": join_tokens(LTE_BANDS),
+                    "nr_band": join_tokens(NR_BANDS),
+                }
+            )
+
+
 def run_solver(args: argparse.Namespace) -> int:
     command = [
         sys.executable,
@@ -289,8 +303,8 @@ def run_solver(args: argparse.Namespace) -> int:
         str(Path(args.input)),
         "--output",
         str(Path(args.output)),
-        "--second-pass-output",
-        str(Path(args.second_pass_output)),
+        "--ru-band-support",
+        str(Path(args.ru_band_support)),
         "--timeout",
         str(args.timeout),
         "--max-candidates-per-bucket",
@@ -299,10 +313,6 @@ def run_solver(args: argparse.Namespace) -> int:
         str(args.max_cover_checks_per_candidate),
         "--max-tc-per-spec",
         str(args.max_tc_per_spec),
-        "--second-pass-max-du",
-        str(args.second_pass_max_du),
-        "--second-pass-max-ru",
-        str(args.second_pass_max_ru),
     ]
     if args.ignore_tech_and_ue_capa:
         command.append("--ignore-tech-and-ue-capa")
@@ -325,9 +335,12 @@ def main() -> int:
         raise SystemExit("--rows must be positive")
 
     input_path = Path(args.input)
+    support_path = Path(args.ru_band_support)
     write_random_input(input_path, args.rows, args.seed, args.variation)
+    write_ru_band_support(support_path)
     print(
-        f"generated={input_path} rows={args.rows} seed={args.seed} variation={args.variation}"
+        f"generated={input_path} support={support_path} "
+        f"rows={args.rows} seed={args.seed} variation={args.variation}"
     )
 
     if args.no_run:
