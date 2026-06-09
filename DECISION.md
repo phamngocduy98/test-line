@@ -14,16 +14,15 @@ project folder.
 
 ## CSV Parsing
 
-Cells are parsed as token lists separated by spaced plus separators:
+Cells are parsed as token lists separated by plus signs, regardless of surrounding whitespace:
 
 ```text
 a + b
 ```
 
-The solver uses a regex separator equivalent to `space + plus + space`, so
-values such as `s23+` remain a single token. This was chosen because telecom
-capability names can contain `+`, while requirement combinations in the input
-use spaces around `+`.
+The solver accepts inconsistent separator spacing such as `a +b`, `a+ b`, and
+`a+b`. A plus sign is always a separator; capability names containing `+` are
+not supported.
 
 Blank cells mean no requirement. The literal value `null` is treated as a real
 requirement value.
@@ -52,12 +51,11 @@ reporting.
 
 ## Single-Select Columns
 
-`cc location` and `ca type` are single-select columns.
+`cc location` is a single-select column.
 
-A generated spec may contain at most one concrete value in each of these
-columns. If two testcases require conflicting concrete values in one of these
-columns, they cannot be merged into the same candidate spec. `any` can be
-satisfied by the selected concrete value.
+A generated spec may contain at most one concrete value in this column. If two
+testcases require conflicting concrete values, they cannot be merged into the same
+candidate spec. `any` can be satisfied by the selected concrete value.
 
 ## Band Rules
 
@@ -218,7 +216,9 @@ of global optimality over all possible merged specs for large inputs.
 
 For very large files, `--max-cover-checks-per-candidate` can reduce coverage
 checking cost, but using it may miss some coverable testcase/spec relationships.
-The default value is `0`, which checks all rows.
+The default value is `0`, which checks all rows. Coverage discovered by repeated
+generation of the same spec is combined, so exact-row candidates still
+guarantee that every testcase has at least one covering candidate.
 
 The random generator is for performance evaluation, not for simulating every
 real telecom rule. It focuses on the columns and constraints currently handled

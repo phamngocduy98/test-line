@@ -20,7 +20,7 @@ from typing import Iterable
 
 ANY = "any"
 RELATION_TOKENS = {"intra", "inter"}
-SINGLE_SELECT_COLUMNS = {"cc location", "ca type"}
+SINGLE_SELECT_COLUMNS = {"cc location"}
 DU_COLUMNS = ("enb", "vdu", "au", "cu")
 RU_COLUMN = "ru"
 UE_COLUMNS = ("ue capa lte", "ue capa nr", "ue capa special")
@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
 def parse_cell(value: str | None) -> tuple[str, ...]:
     if value is None or value == "":
         return ()
-    return tuple(part.strip() for part in re.split(r"\s+\+\s+", value) if part.strip())
+    return tuple(part.strip() for part in re.split(r"\s*\+\s*", value) if part.strip())
 
 
 def render_cell(tokens: Iterable[str]) -> str:
@@ -363,10 +363,22 @@ def add_candidate(
     if current is None:
         candidates[candidate.signature] = candidate
         return
-    current_score = (-len(current.covered), current.equipment_count, sum(current.deltas))
-    new_score = (-len(candidate.covered), candidate.equipment_count, sum(candidate.deltas))
-    if new_score < current_score:
-        candidates[candidate.signature] = candidate
+    # Identical specs can be generated from different seed rows. When coverage
+    # checks are capped, each generation may discover a different subset. Keep
+    # their union so deduplication cannot discard an exact row's self-coverage.
+    delta_by_case = dict(zip(current.covered, current.deltas))
+    for case_index, delta in zip(candidate.covered, candidate.deltas):
+        previous = delta_by_case.get(case_index)
+        if previous is None or delta < previous:
+            delta_by_case[case_index] = delta
+    covered = tuple(sorted(delta_by_case))
+    candidates[candidate.signature] = Candidate(
+        spec=current.spec,
+        covered=covered,
+        deltas=tuple(delta_by_case[index] for index in covered),
+        equipment_count=current.equipment_count,
+        signature=current.signature,
+    )
 
 
 def generate_candidates(
