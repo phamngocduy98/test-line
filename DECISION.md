@@ -87,13 +87,21 @@ The solver counts only:
 
 - DU group: numeric sum of `enb`, `vdu`, `au`, `cu`
 - RU group: number of tokens in `ru`
-- UE group: number of tokens across `ue capa lte`, `ue capa nr`,
-  `ue capa special`
+- UE group: numeric value in `ue`
 
 Other fields are requirements but are not equipment.
 
 Numeric equipment values are summed. Non-numeric equipment tokens and `any`
 count as one slot.
+
+UE capability columns remain coverage requirements unless
+`--ignore-tech-and-ue-capa` is used, but they do not determine UE equipment
+count.
+
+Numeric DU and UE requirements use capacity semantics. A spec with `ue=2`
+covers requirements for `ue=1` or `ue=2`, and merging those requirements keeps
+`ue=2`. For these numeric columns, delta is spare numeric capacity rather than
+extra token count, and the one-extra-token rule does not apply.
 
 ## Candidate Generation
 
@@ -131,6 +139,11 @@ binary decision variables:
 
 Every testcase must be assigned exactly once.
 
+Each selected spec may be assigned at most `--max-tc-per-spec` testcases. The
+default limit is 338. When a spec covers more testcases than the limit, the
+candidate pool includes enough identical physical spec instances to preserve
+feasibility.
+
 ## Optimization Priority
 
 The objective is lexicographic and solved in stages:
@@ -143,6 +156,27 @@ The objective is lexicographic and solved in stages:
 
 The implementation uses staged solves instead of one huge weighted objective to
 avoid integer overflow and weight-tuning problems on large candidate pools.
+
+## Second Pass
+
+After writing the primary output, the solver creates a bounded pool containing
+the selected first-pass specs and compatible pair merges. Pair attempts start
+with the smallest assigned spec and the largest assigned specs so underused
+lines are preferentially consolidated into highly utilized lines. Successful
+merge candidates are capped by `--max-candidates-per-bucket`; pair attempts are
+also bounded to keep runtime practical when most specs are incompatible.
+
+The second pass prioritizes:
+
+1. Minimize selected spec count.
+2. Minimize assignment imbalance.
+3. Minimize maximum equipment count.
+4. Minimize total equipment count.
+5. Minimize total delta.
+
+The same testcase assignment limit and full solution verification apply. The
+result is written to `output_specs_second_pass.csv` by default and can be
+changed with `--second-pass-output`.
 
 ## Timeout Behavior
 
@@ -213,7 +247,7 @@ UE capability generation uses:
 
 - LTE: `emtc`, `volte`
 - NR: `nr`
-- Special: `6cc`, `s23+`, `s21`
+- Special: `6cc`, `s23`, `s21`
 - NSA: `nsa` appears in both `ue capa lte` and `ue capa nr`, matching the sample
   `input.csv` pattern.
 

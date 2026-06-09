@@ -27,6 +27,7 @@ COLUMNS = [
     "cc location",
     "ca type",
     "rf condition",
+    "ue",
     "ue capa lte",
     "ue capa nr",
     "ue capa special",
@@ -40,7 +41,7 @@ CA_TYPES = ["non ca", "intra DU", "inter DU", "inter CU", "any"]
 RF_CONDITIONS = ["", "mobility", "peak 4 path", "cell edge", "handover", "null"]
 UE_LTE = ["emtc", "volte"]
 UE_NR = ["nr"]
-UE_SPECIAL = ["6cc", "s23+", "s21"]
+UE_SPECIAL = ["6cc", "s23", "s21"]
 ANY_RATE = 0.50
 
 
@@ -59,6 +60,11 @@ def parse_args() -> argparse.Namespace:
         "--output",
         default="random_output_specs.csv",
         help="Solver output CSV path. Default: random_output_specs.csv",
+    )
+    parser.add_argument(
+        "--second-pass-output",
+        default="random_output_specs_second_pass.csv",
+        help="Second-pass solver output CSV path.",
     )
     parser.add_argument(
         "--solver",
@@ -87,6 +93,12 @@ def parse_args() -> argparse.Namespace:
         "--ignore-tech-and-ue-capa",
         action="store_true",
         help="Pass --ignore-tech-and-ue-capa to the solver.",
+    )
+    parser.add_argument(
+        "--max-tc-per-spec",
+        type=int,
+        default=338,
+        help="Passed through to solve_test_lines.py. Default: 338.",
     )
     parser.add_argument(
         "--variation",
@@ -228,6 +240,7 @@ def make_row(tc_id: int, rng: random.Random, variation: str) -> dict[str, str]:
         "cc location": "any" if rng.random() < ANY_RATE else rng.choice([v for v in CC_LOCATIONS if v != "any"]),
         "ca type": "any" if rng.random() < ANY_RATE else rng.choice([v for v in CA_TYPES if v != "any"]),
         "rf condition": "any" if rng.random() < ANY_RATE else rng.choice(RF_CONDITIONS),
+        "ue": weighted_choice(rng, [("1", 55), ("2", 35), ("3", 10)]),
         "ue capa lte": ue_lte,
         "ue capa nr": ue_nr,
         "ue capa special": ue_special,
@@ -251,12 +264,16 @@ def run_solver(args: argparse.Namespace) -> int:
         str(Path(args.input)),
         "--output",
         str(Path(args.output)),
+        "--second-pass-output",
+        str(Path(args.second_pass_output)),
         "--timeout",
         str(args.timeout),
         "--max-candidates-per-bucket",
         str(args.max_candidates_per_bucket),
         "--max-cover-checks-per-candidate",
         str(args.max_cover_checks_per_candidate),
+        "--max-tc-per-spec",
+        str(args.max_tc_per_spec),
     ]
     if args.ignore_tech_and_ue_capa:
         command.append("--ignore-tech-and-ue-capa")

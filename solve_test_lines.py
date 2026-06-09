@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import os
 import re
 import time
@@ -23,7 +24,8 @@ RELATION_TOKENS = {"intra", "inter"}
 SINGLE_SELECT_COLUMNS = {"cc location"}
 DU_COLUMNS = ("enb", "vdu", "au", "cu")
 RU_COLUMN = "ru"
-UE_COLUMNS = ("ue capa lte", "ue capa nr", "ue capa special")
+UE_COLUMN = "ue"
+NUMERIC_EQUIPMENT_COLUMNS = set(DU_COLUMNS) | {UE_COLUMN}
 
 
 @dataclass(frozen=True)
@@ -49,6 +51,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--input", default="input.csv", help="Input testcase CSV path.")
     parser.add_argument("--output", default="output_specs.csv", help="Output specs CSV path.")
+    parser.add_argument(
+        "--second-pass-output",
+        default="output_specs_second_pass.csv",
+        help="Second-pass merged specs CSV path. Default: output_specs_second_pass.csv.",
+    )
     parser.add_argument(
         "--timeout",
         type=float,
@@ -78,6 +85,12 @@ def parse_args() -> argparse.Namespace:
             "Ignored columns are blank in the output."
         ),
     )
+    parser.add_argument(
+        "--max-tc-per-spec",
+        type=int,
+        default=338,
+        help="Maximum assigned testcases per selected spec. Default: 338.",
+    )
     return parser.parse_args()
 
 
@@ -106,6 +119,18 @@ def any_count(tokens: Iterable[str]) -> int:
 
 def concrete_tokens(tokens: Iterable[str]) -> tuple[str, ...]:
     return tuple(token for token in tokens if not is_any(token))
+
+
+def all_integer_tokens(tokens: Iterable[str]) -> bool:
+    values = tuple(tokens)
+    if not values:
+        return False
+    try:
+        for token in values:
+            int(token)
+    except ValueError:
+        return False
+    return True
 
 
 def load_cases(path: Path) -> tuple[list[str], list[TestCase]]:
@@ -170,7 +195,17 @@ def covers_column(
         if len(concrete) > 1:
             return False, 0
 
-    if column in {"lte band", "nr band"}:
+    if (
+        column in NUMERIC_EQUIPMENT_COLUMNS
+        and all_integer_tokens(spec_tokens)
+        and all_integer_tokens(case_tokens)
+    ):
+        spec_count = sum(map(int, spec_tokens))
+        case_count = sum(map(int, case_tokens))
+        if spec_count < case_count:
+            return False, 0
+        return True, spec_count - case_count
+    elif column in {"lte band", "nr band"}:
         for token in case_tokens:
             lower = token.lower()
             if is_any(token):
@@ -214,10 +249,19 @@ def coverage_delta(
 
 
 def merge_column(column: str, token_lists: Iterable[tuple[str, ...]]) -> tuple[str, ...] | None:
+    token_list = list(token_lists)
+    numeric_rows = [tokens for tokens in token_list if tokens]
+    if (
+        column in NUMERIC_EQUIPMENT_COLUMNS
+        and numeric_rows
+        and all(all_integer_tokens(tokens) for tokens in numeric_rows)
+    ):
+        return (str(max(sum(map(int, tokens)) for tokens in numeric_rows)),)
+
     ordered_tokens: list[str] = []
     max_counts: Counter[str] = Counter()
     max_len = 0
-    for tokens in token_lists:
+    for tokens in token_list:
         max_len = max(max_len, len(tokens))
         row_counts: Counter[str] = Counter()
         for token in tokens:
@@ -281,9 +325,8 @@ def equipment_count(requirement_columns: list[str], spec: dict[str, tuple[str, .
             total += numeric_equipment(spec[column])
     if RU_COLUMN in requirement_columns:
         total += len(spec[RU_COLUMN])
-    for column in UE_COLUMNS:
-        if column in requirement_columns:
-            total += len(spec[column])
+    if UE_COLUMN in requirement_columns:
+        total += numeric_equipment(spec[UE_COLUMN])
     return total
 
 
@@ -311,10 +354,14 @@ def coarse_signature(requirement_columns: list[str], case: TestCase, include_equ
             _, relations, _ = split_band_tokens(tokens)
             parts.append((column, tuple(sorted(relations))))
         elif include_equipment and (
-            column in DU_COLUMNS or column == RU_COLUMN or column in UE_COLUMNS
+            column in DU_COLUMNS or column in {RU_COLUMN, UE_COLUMN}
         ):
             parts.append((column, tokens))
-        elif not include_equipment and column not in DU_COLUMNS and column != RU_COLUMN and column not in UE_COLUMNS:
+        elif (
+            not include_equipment
+            and column not in DU_COLUMNS
+            and column not in {RU_COLUMN, UE_COLUMN}
+        ):
             parts.append((column, tuple(token for token in tokens if not is_any(token))))
     return tuple(parts)
 
@@ -485,8 +532,22 @@ def generate_candidates(
     )
 
 
+def expand_candidates_for_capacity(
+    candidates: list[Candidate], max_tc_per_spec: int
+) -> list[Candidate]:
+    expanded: list[Candidate] = []
+    for candidate in candidates:
+        copy_count = max(1, math.ceil(len(candidate.covered) / max_tc_per_spec))
+        expanded.extend([candidate] * copy_count)
+    return expanded
+
+
 def solve_with_ortools(
-    candidates: list[Candidate], cases: list[TestCase], timeout_seconds: float
+    candidates: list[Candidate],
+    cases: list[TestCase],
+    timeout_seconds: float,
+    max_tc_per_spec: int,
+    utilization_first: bool = False,
 ) -> tuple[str, list[int], dict[int, int]]:
     try:
         from ortools.sat.python import cp_model
@@ -524,7 +585,7 @@ def solve_with_ortools(
             == sum(assignments[(case_index, j)] for case_index in candidate.covered)
         )
         model.Add(assigned_count >= selected[j])
-        model.Add(assigned_count <= num_cases * selected[j])
+        model.Add(assigned_count <= max_tc_per_spec * selected[j])
         assigned_count_vars.append(assigned_count)
 
     max_equipment = model.NewIntVar(0, max(c.equipment_count for c in candidates), "max_equipment")
@@ -549,13 +610,22 @@ def solve_with_ortools(
     solver.parameters.num_search_workers = max(1, min(8, os.cpu_count() or 8))
     started_at = time.monotonic()
 
-    objectives = (
-        max_equipment,
-        total_equipment,
-        selected_count,
-        imbalance,
-        total_delta,
-    )
+    if utilization_first:
+        objectives = (
+            selected_count,
+            imbalance,
+            max_equipment,
+            total_equipment,
+            total_delta,
+        )
+    else:
+        objectives = (
+            max_equipment,
+            total_equipment,
+            selected_count,
+            imbalance,
+            total_delta,
+        )
     solve_status = "OPTIMAL"
     status = None
     for objective in objectives:
@@ -586,6 +656,7 @@ def validate_solution(
     candidates: list[Candidate],
     selected_indices: list[int],
     assignment_by_case: dict[int, int],
+    max_tc_per_spec: int,
 ) -> None:
     if set(assignment_by_case) != {case.index for case in cases}:
         raise SystemExit("verification failed: every testcase must be assigned exactly once")
@@ -593,6 +664,10 @@ def validate_solution(
     assigned_candidates = set(assignment_by_case.values())
     if assigned_candidates != selected_set:
         raise SystemExit("verification failed: selected specs and assigned specs differ")
+
+    assigned_counts = Counter(assignment_by_case.values())
+    if any(count > max_tc_per_spec for count in assigned_counts.values()):
+        raise SystemExit("verification failed: testcase limit exceeded")
 
     for case in cases:
         candidate = candidates[assignment_by_case[case.index]]
@@ -606,6 +681,89 @@ def validate_solution(
                     raise SystemExit(f"verification failed: {column} has multiple concrete values")
         if candidate.equipment_count != equipment_count(requirement_columns, candidate.spec):
             raise SystemExit("verification failed: equipment count mismatch")
+
+
+def generate_second_pass_candidates(
+    requirement_columns: list[str],
+    cases: list[TestCase],
+    first_candidates: list[Candidate],
+    selected_indices: list[int],
+    assignment_by_case: dict[int, int],
+    max_merge_candidates: int,
+    max_cover_checks: int,
+) -> list[Candidate]:
+    candidates_by_signature: dict[
+        tuple[tuple[str, tuple[str, ...]], ...], Candidate
+    ] = {}
+    for candidate_index in selected_indices:
+        add_candidate(candidates_by_signature, first_candidates[candidate_index])
+
+    assigned_by_candidate: dict[int, list[int]] = defaultdict(list)
+    for case_index, candidate_index in assignment_by_case.items():
+        assigned_by_candidate[candidate_index].append(case_index)
+
+    selected_sorted = sorted(
+        selected_indices,
+        key=lambda index: (
+            len(assigned_by_candidate[index]),
+            first_candidates[index].equipment_count,
+            index,
+        ),
+    )
+    generated = 0
+    attempted = 0
+    max_attempts = max_merge_candidates * 20
+    for left, first_index in enumerate(selected_sorted):
+        for right in range(len(selected_sorted) - 1, left, -1):
+            attempted += 1
+            if attempted > max_attempts:
+                return sorted(
+                    candidates_by_signature.values(),
+                    key=lambda item: (
+                        item.equipment_count,
+                        -len(item.covered),
+                        sum(item.deltas),
+                        item.signature,
+                    ),
+                )
+            second_index = selected_sorted[right]
+            seed_indices = (
+                assigned_by_candidate[first_index]
+                + assigned_by_candidate[second_index]
+            )
+            candidate = build_candidate(
+                requirement_columns,
+                cases,
+                seed_indices,
+                cases,
+                max_cover_checks,
+            )
+            if candidate is None:
+                continue
+            before = len(candidates_by_signature)
+            add_candidate(candidates_by_signature, candidate)
+            if len(candidates_by_signature) > before:
+                generated += 1
+                if generated >= max_merge_candidates:
+                    return sorted(
+                        candidates_by_signature.values(),
+                        key=lambda item: (
+                            item.equipment_count,
+                            -len(item.covered),
+                            sum(item.deltas),
+                            item.signature,
+                        ),
+                    )
+
+    return sorted(
+        candidates_by_signature.values(),
+        key=lambda candidate: (
+            candidate.equipment_count,
+            -len(candidate.covered),
+            sum(candidate.deltas),
+            candidate.signature,
+        ),
+    )
 
 
 def write_output(
@@ -684,6 +842,11 @@ def main() -> int:
     started_at = time.monotonic()
     input_path = Path(args.input)
     output_path = Path(args.output)
+    second_pass_output_path = Path(args.second_pass_output)
+    if args.max_tc_per_spec <= 0:
+        raise SystemExit("--max-tc-per-spec must be positive")
+    if output_path == second_pass_output_path:
+        raise SystemExit("--output and --second-pass-output must be different paths")
 
     input_columns, cases = load_cases(input_path)
     requirement_columns = [column for column in input_columns if column != "tc_id"]
@@ -702,12 +865,21 @@ def main() -> int:
     )
     if not candidates:
         raise SystemExit("no candidate specs generated")
+    candidates = expand_candidates_for_capacity(candidates, args.max_tc_per_spec)
 
     solve_status, selected_indices, assignment_by_case = solve_with_ortools(
-        candidates, cases, args.timeout
+        candidates,
+        cases,
+        args.timeout,
+        args.max_tc_per_spec,
     )
     validate_solution(
-        requirement_columns, cases, candidates, selected_indices, assignment_by_case
+        requirement_columns,
+        cases,
+        candidates,
+        selected_indices,
+        assignment_by_case,
+        args.max_tc_per_spec,
     )
     spec_count, max_equipment, total_equipment, total_delta, distribution = write_output(
         output_path,
@@ -718,6 +890,50 @@ def main() -> int:
         selected_indices,
         assignment_by_case,
         solve_status,
+    )
+
+    second_pass_candidates = generate_second_pass_candidates(
+        requirement_columns=requirement_columns,
+        cases=cases,
+        first_candidates=candidates,
+        selected_indices=selected_indices,
+        assignment_by_case=assignment_by_case,
+        max_merge_candidates=max(1, args.max_candidates_per_bucket),
+        max_cover_checks=max(0, args.max_cover_checks_per_candidate),
+    )
+    second_pass_candidates = expand_candidates_for_capacity(
+        second_pass_candidates, args.max_tc_per_spec
+    )
+    second_status, second_selected, second_assignment = solve_with_ortools(
+        second_pass_candidates,
+        cases,
+        args.timeout,
+        args.max_tc_per_spec,
+        utilization_first=True,
+    )
+    validate_solution(
+        requirement_columns,
+        cases,
+        second_pass_candidates,
+        second_selected,
+        second_assignment,
+        args.max_tc_per_spec,
+    )
+    (
+        second_spec_count,
+        second_max_equipment,
+        second_total_equipment,
+        second_total_delta,
+        second_distribution,
+    ) = write_output(
+        second_pass_output_path,
+        input_columns,
+        requirement_columns,
+        cases,
+        second_pass_candidates,
+        second_selected,
+        second_assignment,
+        second_status,
     )
 
     elapsed = time.monotonic() - started_at
@@ -731,6 +947,14 @@ def main() -> int:
     print(f"total_equipment={total_equipment}")
     print(f"total_delta={total_delta}")
     print(f"output={output_path}")
+    print(f"second_pass_status={second_status}")
+    print(f"second_pass_candidate_specs={len(second_pass_candidates)}")
+    print(f"second_pass_selected_specs={second_spec_count}")
+    print(f"second_pass_assignment_distribution={second_distribution}")
+    print(f"second_pass_max_equipment={second_max_equipment}")
+    print(f"second_pass_total_equipment={second_total_equipment}")
+    print(f"second_pass_total_delta={second_total_delta}")
+    print(f"second_pass_output={second_pass_output_path}")
     return 0
 
 
