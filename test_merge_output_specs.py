@@ -87,6 +87,76 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1"))
         self.assertEqual(merged[0].spec["lte band"], ("b1", "b2"))
 
+    def test_later_broader_spec_absorbs_earlier_smaller_spec(self) -> None:
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
+            SpecGroup(
+                1,
+                [1],
+                {"ru": ("rf-1", "rf-1"), "enb": ("1",)},
+            ),
+        ]
+
+        merged, count = merge_small_groups(
+            groups,
+            ["ru", "enb"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+        )
+
+        self.assertEqual(count, 1)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].original_order, 1)
+        self.assertEqual(merged[0].assigned_indices, [0, 1])
+
+    def test_equivalent_specs_keep_earlier_input_spec(self) -> None:
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
+            SpecGroup(1, [1], {"ru": ("rf-1",), "enb": ("1",)}),
+        ]
+
+        merged, count = merge_small_groups(
+            groups,
+            ["ru", "enb"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+        )
+
+        self.assertEqual(count, 1)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].original_order, 0)
+        self.assertEqual(merged[0].assigned_indices, [0, 1])
+
+    def test_bubble_merge_restarts_after_each_merge(self) -> None:
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
+            SpecGroup(
+                1,
+                [1],
+                {"ru": ("rf-1", "rf-1"), "enb": ("1",)},
+            ),
+            SpecGroup(
+                2,
+                [2],
+                {"ru": ("rf-1", "rf-1", "rf-1"), "enb": ("1",)},
+            ),
+        ]
+
+        merged, count = merge_small_groups(
+            groups,
+            ["ru", "enb"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+        )
+
+        self.assertEqual(count, 2)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].original_order, 2)
+        self.assertEqual(merged[0].assigned_indices, [0, 1, 2])
+
     def test_ru_limit_rejects_merge(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-1", enb="1"),

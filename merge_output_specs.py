@@ -202,38 +202,45 @@ def merge_small_groups(
     active = list(groups)
     merged_count = 0
 
-    targets = sorted(
-        (
-            group
-            for group in active
-            if du_count(group.spec) <= max_du and ru_count(group.spec) <= max_ru
-        ),
-        key=lambda group: (
-            -len(group.assigned_indices),
-            -equipment_count(requirement_columns, group.spec),
-            group.original_order,
-        ),
-    )
-    for target in targets:
-        if target not in active:
-            continue
-        sources = sorted(
-            (group for group in active if group is not target),
-            key=lambda group: (len(group.assigned_indices), group.original_order),
-        )
-        for source in sources:
-            if not target_accepts_source(
-                source,
-                target,
-                requirement_columns,
-                support,
-            ):
-                continue
-            target.assigned_indices = sorted(
-                set(target.assigned_indices + source.assigned_indices)
-            )
-            active.remove(source)
-            merged_count += 1
+    def target_is_eligible(group: SpecGroup) -> bool:
+        return du_count(group.spec) <= max_du and ru_count(group.spec) <= max_ru
+
+    while True:
+        merged = False
+        ordered = sorted(active, key=lambda group: group.original_order)
+        for left_index, left in enumerate(ordered):
+            for right in ordered[left_index + 1:]:
+                left_accepts = target_is_eligible(left) and target_accepts_source(
+                    right,
+                    left,
+                    requirement_columns,
+                    support,
+                )
+                right_accepts = target_is_eligible(right) and target_accepts_source(
+                    left,
+                    right,
+                    requirement_columns,
+                    support,
+                )
+                if not left_accepts and not right_accepts:
+                    continue
+
+                if left_accepts:
+                    target, source = left, right
+                else:
+                    target, source = right, left
+
+                target.assigned_indices = sorted(
+                    set(target.assigned_indices + source.assigned_indices)
+                )
+                active.remove(source)
+                merged_count += 1
+                merged = True
+                break
+            if merged:
+                break
+        if not merged:
+            break
 
     return active, merged_count
 
