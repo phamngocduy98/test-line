@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import math
 import os
 import re
 import time
@@ -43,7 +42,6 @@ class TestCase:
 class Candidate:
     spec: dict[str, tuple[str, ...]]
     covered: tuple[int, ...]
-    deltas: tuple[int, ...]
     equipment_count: int
     signature: tuple[tuple[str, tuple[str, ...]], ...]
 
@@ -96,12 +94,6 @@ def parse_args() -> argparse.Namespace:
             "Ignore all tech and ue capa columns during optimization. "
             "Ignored columns are blank in the output."
         ),
-    )
-    parser.add_argument(
-        "--max-tc-per-spec",
-        type=int,
-        default=338,
-        help="Maximum assigned testcases per selected spec. Default: 338.",
     )
     return parser.parse_args()
 
@@ -745,9 +737,8 @@ def build_candidate_variants(
         if support is not None and not spec_has_compatible_ru_bands(spec, support):
             continue
         covered: list[int] = []
-        deltas: list[int] = []
         for case in check_cases:
-            ok, delta = coverage_delta(
+            ok, _ = coverage_delta(
                 requirement_columns,
                 spec,
                 case,
@@ -755,13 +746,12 @@ def build_candidate_variants(
             )
             if ok:
                 covered.append(case.index)
-                deltas.append(delta)
 
         seed_is_covered = True
         for index in index_tuple:
             if index in covered:
                 continue
-            ok, delta = coverage_delta(
+            ok, _ = coverage_delta(
                 requirement_columns,
                 spec,
                 all_cases[index],
@@ -771,7 +761,6 @@ def build_candidate_variants(
                 seed_is_covered = False
                 break
             covered.append(index)
-            deltas.append(delta)
         if not seed_is_covered:
             continue
 
@@ -780,7 +769,6 @@ def build_candidate_variants(
             Candidate(
                 spec=spec,
                 covered=tuple(covered),
-                deltas=tuple(deltas),
                 equipment_count=equipment_count(requirement_columns, spec),
                 signature=signature,
             )
@@ -824,16 +812,10 @@ def add_candidate(
     # Identical specs can be generated from different seed rows. When coverage
     # checks are capped, each generation may discover a different subset. Keep
     # their union so deduplication cannot discard an exact row's self-coverage.
-    delta_by_case = dict(zip(current.covered, current.deltas))
-    for case_index, delta in zip(candidate.covered, candidate.deltas):
-        previous = delta_by_case.get(case_index)
-        if previous is None or delta < previous:
-            delta_by_case[case_index] = delta
-    covered = tuple(sorted(delta_by_case))
+    covered = tuple(sorted(set(current.covered) | set(candidate.covered)))
     candidates[candidate.signature] = Candidate(
         spec=current.spec,
         covered=covered,
-        deltas=tuple(delta_by_case[index] for index in covered),
         equipment_count=current.equipment_count,
         signature=current.signature,
     )
@@ -941,106 +923,58 @@ def generate_candidates(
         key=lambda candidate: (
             candidate.equipment_count,
             -len(candidate.covered),
-            sum(candidate.deltas),
             candidate.signature,
         ),
     )
 
 
-def expand_candidates_for_capacity(
-    candidates: list[Candidate], max_tc_per_spec: int
-) -> list[Candidate]:
-    expanded: list[Candidate] = []
-    for candidate in candidates:
-        copy_count = max(1, math.ceil(len(candidate.covered) / max_tc_per_spec))
-        expanded.extend([candidate] * copy_count)
-    return expanded
+
 
 
 def solve_with_ortools(
     candidates: list[Candidate],
     cases: list[TestCase],
     timeout_seconds: float,
-    max_tc_per_spec: int,
-) -> tuple[str, list[int], dict[int, int]]:
+) -> tuple[str, list[int]]:
     try:
         from ortools.sat.python import cp_model
     except ImportError:
         raise SystemExit("Missing dependency: pip install ortools") from None
 
     model = cp_model.CpModel()
-    num_cases = len(cases)
     num_candidates = len(candidates)
 
     selected = [model.NewBoolVar(f"selected_{j}") for j in range(num_candidates)]
-    assignments: dict[tuple[int, int], object] = {}
     coverers: dict[int, list[int]] = defaultdict(list)
-    delta_by_assignment: dict[tuple[int, int], int] = {}
 
     for j, candidate in enumerate(candidates):
-        for case_index, delta in zip(candidate.covered, candidate.deltas):
-            var = model.NewBoolVar(f"assign_{case_index}_{j}")
-            assignments[(case_index, j)] = var
+        for case_index in candidate.covered:
             coverers[case_index].append(j)
-            delta_by_assignment[(case_index, j)] = delta
-            model.Add(var <= selected[j])
 
     for case in cases:
         if not coverers[case.index]:
             raise SystemExit(f"no candidate covers testcase {case.tc_id}")
-        model.Add(sum(assignments[(case.index, j)] for j in coverers[case.index]) == 1)
+        model.Add(sum(selected[j] for j in coverers[case.index]) >= 1)
 
-    assigned_count_vars = []
-    selected_count = sum(selected)
-    for j, candidate in enumerate(candidates):
-        assigned_count = model.NewIntVar(0, num_cases, f"assigned_count_{j}")
-        model.Add(
-            assigned_count
-            == sum(assignments[(case_index, j)] for case_index in candidate.covered)
-        )
-        model.Add(assigned_count >= selected[j])
-        model.Add(assigned_count <= max_tc_per_spec * selected[j])
-        assigned_count_vars.append(assigned_count)
-
-    hinted_assignments: dict[int, int] = {}
-    hinted_counts: Counter[int] = Counter()
+    hinted_selected = set()
     for case in cases:
         candidate_index = next(
-            (
-                j
-                for j in coverers[case.index]
-                if hinted_counts[j] < max_tc_per_spec
-            ),
+            (j for j in coverers[case.index]),
             None,
         )
         if candidate_index is None:
-            raise SystemExit(f"no capacity-feasible candidate covers testcase {case.tc_id}")
-        hinted_assignments[case.index] = candidate_index
-        hinted_counts[candidate_index] += 1
+            raise SystemExit(f"no candidate covers testcase {case.tc_id}")
+        hinted_selected.add(candidate_index)
 
-    hinted_selected = set(hinted_assignments.values())
     for j, var in enumerate(selected):
         model.AddHint(var, int(j in hinted_selected))
-    for key, var in assignments.items():
-        model.AddHint(var, int(hinted_assignments[key[0]] == key[1]))
 
     max_equipment = model.NewIntVar(0, max(c.equipment_count for c in candidates), "max_equipment")
     for j, candidate in enumerate(candidates):
         model.Add(max_equipment >= candidate.equipment_count * selected[j])
 
     total_equipment = sum(candidates[j].equipment_count * selected[j] for j in range(num_candidates))
-    total_delta = sum(
-        delta_by_assignment[key] * var for key, var in assignments.items()
-    )
-
-    max_assigned = model.NewIntVar(0, num_cases, "max_assigned")
-    min_assigned = model.NewIntVar(0, num_cases, "min_assigned")
-    for j in range(num_candidates):
-        model.Add(max_assigned >= assigned_count_vars[j])
-        # If not selected, use a large relaxed upper side so it does not force min to 0.
-        model.Add(min_assigned <= assigned_count_vars[j] + num_cases * (1 - selected[j]))
-    imbalance = model.NewIntVar(0, num_cases, "imbalance")
-    model.Add(imbalance == max_assigned - min_assigned)
+    selected_count = sum(selected)
 
     solver = cp_model.CpSolver()
     solver.parameters.num_search_workers = max(1, min(8, os.cpu_count() or 8))
@@ -1050,13 +984,10 @@ def solve_with_ortools(
         max_equipment,
         total_equipment,
         selected_count,
-        imbalance,
-        total_delta,
     )
     solve_status = "OPTIMAL"
     status = None
     best_selected_indices: list[int] | None = None
-    best_assignment_by_case: dict[int, int] | None = None
     for objective in objectives:
         remaining = max(0.1, timeout_seconds - (time.monotonic() - started_at))
         solver.parameters.max_time_in_seconds = remaining
@@ -1066,26 +997,21 @@ def solve_with_ortools(
             best_selected_indices = [
                 j for j, var in enumerate(selected) if solver.BooleanValue(var)
             ]
-            best_assignment_by_case = {
-                case_index: candidate_index
-                for (case_index, candidate_index), var in assignments.items()
-                if solver.BooleanValue(var)
-            }
         if status == cp_model.OPTIMAL:
             model.Add(objective == int(solver.ObjectiveValue()))
             continue
         if status == cp_model.FEASIBLE:
             solve_status = "FEASIBLE_TIMEOUT"
             break
-        if status == cp_model.UNKNOWN and best_assignment_by_case is not None:
+        if status == cp_model.UNKNOWN and best_selected_indices is not None:
             solve_status = "FEASIBLE_TIMEOUT"
             break
         raise SystemExit("no feasible solution found")
 
-    if best_selected_indices is None or best_assignment_by_case is None:
+    if best_selected_indices is None:
         raise SystemExit("no feasible solution found")
 
-    return solve_status, best_selected_indices, best_assignment_by_case
+    return solve_status, best_selected_indices
 
 
 def validate_solution(
@@ -1093,33 +1019,42 @@ def validate_solution(
     cases: list[TestCase],
     candidates: list[Candidate],
     selected_indices: list[int],
-    assignment_by_case: dict[int, int],
-    max_tc_per_spec: int,
     enforce_delta: bool = True,
     support: RuBandSupport | None = None,
 ) -> None:
-    if set(assignment_by_case) != {case.index for case in cases}:
-        raise SystemExit("verification failed: every testcase must be assigned exactly once")
     selected_set = set(selected_indices)
-    assigned_candidates = set(assignment_by_case.values())
-    if assigned_candidates != selected_set:
-        raise SystemExit("verification failed: selected specs and assigned specs differ")
+    covered_cases = set()
+    for j in selected_indices:
+        covered_cases.update(candidates[j].covered)
 
-    assigned_counts = Counter(assignment_by_case.values())
-    if any(count > max_tc_per_spec for count in assigned_counts.values()):
-        raise SystemExit("verification failed: testcase limit exceeded")
+    missing_cases = {case.index for case in cases} - covered_cases
+    if missing_cases:
+        missing_ids = [cases[idx].tc_id for idx in sorted(missing_cases)]
+        raise SystemExit(f"verification failed: uncovered testcases: {missing_ids}")
 
     for case in cases:
-        candidate = candidates[assignment_by_case[case.index]]
-        ok, _ = coverage_delta(
-            requirement_columns,
-            candidate.spec,
-            case,
-            enforce_delta=enforce_delta,
-            support=support,
-        )
-        if not ok:
+        covering_candidates = [
+            candidates[j] for j in selected_indices if case.index in candidates[j].covered
+        ]
+        if not covering_candidates:
             raise SystemExit(f"verification failed: testcase {case.tc_id} is not covered")
+        verified = False
+        for candidate in covering_candidates:
+            ok, _ = coverage_delta(
+                requirement_columns,
+                candidate.spec,
+                case,
+                enforce_delta=enforce_delta,
+                support=support,
+            )
+            if ok:
+                verified = True
+                break
+        if not verified:
+            raise SystemExit(f"verification failed: testcase {case.tc_id} is not covered according to coverage_delta")
+
+    for j in selected_indices:
+        candidate = candidates[j]
         for column in SINGLE_SELECT_COLUMNS:
             if column in candidate.spec:
                 concrete = [token for token in candidate.spec[column] if not is_any(token)]
@@ -1140,23 +1075,15 @@ def write_output(
     cases: list[TestCase],
     candidates: list[Candidate],
     selected_indices: list[int],
-    assignment_by_case: dict[int, int],
     solve_status: str,
     enforce_delta: bool = True,
     support: RuBandSupport | None = None,
-) -> tuple[int, int, int, int, list[int]]:
-    assignments_by_candidate: dict[int, list[TestCase]] = defaultdict(list)
-    for case in cases:
-        assignments_by_candidate[assignment_by_case[case.index]].append(case)
-
+) -> tuple[int, int, int]:
     output_columns = [
         "spec_id",
-        "assigned_tc_ids",
-        "assigned_count",
         "covered_tc_ids",
         "covered_count",
         "equipment_count",
-        "total_delta",
         "solve_status",
     ] + [column for column in input_columns if column != "tc_id"]
 
@@ -1164,42 +1091,23 @@ def write_output(
         selected_indices,
         key=lambda index: (
             candidates[index].equipment_count,
-            -len(assignments_by_candidate[index]),
-            min(case.index for case in assignments_by_candidate[index]),
+            -len(candidates[index].covered),
+            min(candidates[index].covered),
         ),
     )
 
-    total_delta = 0
-    distribution: list[int] = []
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=output_columns)
         writer.writeheader()
         for spec_number, candidate_index in enumerate(selected_sorted, start=1):
             candidate = candidates[candidate_index]
-            assigned_cases = sorted(assignments_by_candidate[candidate_index], key=lambda case: case.index)
-            assigned_ids = [case.tc_id for case in assigned_cases]
             covered_ids = [cases[index].tc_id for index in candidate.covered]
-            assigned_delta = sum(
-                coverage_delta(
-                    requirement_columns,
-                    candidate.spec,
-                    case,
-                    enforce_delta=enforce_delta,
-                    support=support,
-                )[1]
-                for case in assigned_cases
-            )
-            total_delta += assigned_delta
-            distribution.append(len(assigned_cases))
 
             row = {
                 "spec_id": f"spec_{spec_number}",
-                "assigned_tc_ids": " + ".join(assigned_ids),
-                "assigned_count": len(assigned_ids),
                 "covered_tc_ids": " + ".join(covered_ids),
                 "covered_count": len(covered_ids),
                 "equipment_count": candidate.equipment_count,
-                "total_delta": assigned_delta,
                 "solve_status": solve_status,
             }
             for column in requirement_columns:
@@ -1209,7 +1117,7 @@ def write_output(
     selected_candidates = [candidates[index] for index in selected_indices]
     max_equipment = max(candidate.equipment_count for candidate in selected_candidates)
     total_equipment = sum(candidate.equipment_count for candidate in selected_candidates)
-    return len(selected_indices), max_equipment, total_equipment, total_delta, distribution
+    return len(selected_indices), max_equipment, total_equipment
 
 
 def main() -> int:
@@ -1218,8 +1126,6 @@ def main() -> int:
     input_path = Path(args.input)
     output_path = Path(args.output)
     support_path = Path(args.ru_band_support)
-    if args.max_tc_per_spec <= 0:
-        raise SystemExit("--max-tc-per-spec must be positive")
 
     input_columns, cases = load_cases(input_path)
     support = load_ru_band_support(support_path)
@@ -1241,31 +1147,26 @@ def main() -> int:
     )
     if not candidates:
         raise SystemExit("no candidate specs generated")
-    candidates = expand_candidates_for_capacity(candidates, args.max_tc_per_spec)
 
-    solve_status, selected_indices, assignment_by_case = solve_with_ortools(
+    solve_status, selected_indices = solve_with_ortools(
         candidates,
         cases,
         args.timeout,
-        args.max_tc_per_spec,
     )
     validate_solution(
         requirement_columns,
         cases,
         candidates,
         selected_indices,
-        assignment_by_case,
-        args.max_tc_per_spec,
         support=support,
     )
-    spec_count, max_equipment, total_equipment, total_delta, distribution = write_output(
+    spec_count, max_equipment, total_equipment = write_output(
         output_path,
         input_columns,
         requirement_columns,
         cases,
         candidates,
         selected_indices,
-        assignment_by_case,
         solve_status,
         support=support,
     )
@@ -1276,10 +1177,8 @@ def main() -> int:
     print(f"input_testcases={len(cases)}")
     print(f"candidate_specs={len(candidates)}")
     print(f"selected_specs={spec_count}")
-    print(f"assignment_distribution={distribution}")
     print(f"max_equipment={max_equipment}")
     print(f"total_equipment={total_equipment}")
-    print(f"total_delta={total_delta}")
     print(f"output={output_path}")
     return 0
 

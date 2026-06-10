@@ -1,7 +1,7 @@
 # Implementation Decisions
 
 This document records the main implementation decisions for the test line spec
-optimizer and random benchmark generator.
+optimizer (Set Cover model) and random benchmark generator.
 
 ## Solver File
 
@@ -187,18 +187,12 @@ If OR-Tools is not installed, the program exits with:
 Missing dependency: pip install ortools
 ```
 
-OR-Tools was chosen because the assignment problem is naturally modeled with
+OR-Tools was chosen because the set cover problem is naturally modeled with
 binary decision variables:
 
-- whether a candidate spec is selected;
-- whether a testcase is assigned to a selected spec.
+- whether a candidate spec is selected.
 
-Every testcase must be assigned exactly once.
-
-Each selected spec may be assigned at most `--max-tc-per-spec` testcases. The
-default limit is 338. When a spec covers more testcases than the limit, the
-candidate pool includes enough identical physical spec instances to preserve
-feasibility.
+Every testcase must be covered by at least one selected spec.
 
 ## Optimization Priority
 
@@ -207,8 +201,6 @@ The objective is lexicographic and solved in stages:
 1. Minimize maximum equipment count in any selected spec.
 2. Minimize total equipment count across selected specs.
 3. Minimize selected spec count.
-4. Minimize assignment imbalance.
-5. Minimize total delta.
 
 The implementation uses staged solves instead of one huge weighted objective to
 avoid integer overflow and weight-tuning problems on large candidate pools.
@@ -231,17 +223,13 @@ last completed stage if a later optimization stage reaches the timeout.
 `output_specs.csv` includes:
 
 - `spec_id`
-- `assigned_tc_ids`
-- `assigned_count`
 - `covered_tc_ids`
 - `covered_count`
 - `equipment_count`
-- `total_delta`
 - `solve_status`
 - all original requirement columns except `tc_id`
 
-Assigned testcase IDs are the final one-to-one assignment used for balancing.
-Covered testcase IDs show all testcases that the spec could cover.
+Covered testcase IDs show all testcases that the spec covers.
 
 ## Second-Pass Compaction
 
@@ -253,8 +241,7 @@ Its implemented behavior and planned smart-merge decisions are documented in
 
 Before writing output, the solver validates:
 
-- every testcase is assigned exactly once;
-- each assigned testcase is covered by its assigned spec;
+- every testcase is covered by at least one selected spec;
 - per-column delta does not exceed one;
 - single-select columns do not emit multiple concrete values;
 - equipment count matches the implemented counting rule.

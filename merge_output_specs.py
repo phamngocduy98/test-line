@@ -32,12 +32,9 @@ from solve_test_lines import (
 
 METADATA_COLUMNS = [
     "spec_id",
-    "assigned_tc_ids",
-    "assigned_count",
     "covered_tc_ids",
     "covered_count",
     "equipment_count",
-    "total_delta",
     "solve_status",
 ]
 
@@ -45,7 +42,7 @@ METADATA_COLUMNS = [
 @dataclass
 class SpecGroup:
     original_order: int
-    assigned_indices: list[int]
+    covered_indices: list[int]
     spec: dict[str, tuple[str, ...]]
 
 
@@ -146,11 +143,11 @@ def load_groups(
     ]
 
     groups: list[SpecGroup] = []
-    assigned_once: set[int] = set()
+    covered_once: set[int] = set()
     for order, row in enumerate(rows):
-        tc_ids = parse_id_list(row.get("assigned_tc_ids", ""))
+        tc_ids = parse_id_list(row.get("covered_tc_ids", ""))
         if not tc_ids:
-            raise SystemExit(f"spec row {order + 2} has no assigned testcase IDs")
+            raise SystemExit(f"spec row {order + 2} has no covered testcase IDs")
         unknown = [tc_id for tc_id in tc_ids if tc_id not in case_by_id]
         if unknown:
             raise SystemExit(
@@ -158,17 +155,11 @@ def load_groups(
                 + ", ".join(unknown)
             )
         indices = [case_by_id[tc_id].index for tc_id in tc_ids]
-        duplicate_indices = assigned_once.intersection(indices)
-        if duplicate_indices:
-            duplicate_ids = [cases[index].tc_id for index in sorted(duplicate_indices)]
-            raise SystemExit(
-                "testcases are assigned to multiple specs: " + ", ".join(duplicate_ids)
-            )
-        assigned_once.update(indices)
+        covered_once.update(indices)
         groups.append(
             SpecGroup(
                 original_order=order,
-                assigned_indices=indices,
+                covered_indices=indices,
                 spec={
                     column: parse_cell(row.get(column, ""))
                     for column in active_columns
@@ -177,10 +168,10 @@ def load_groups(
         )
 
     expected = {case.index for case in cases}
-    if assigned_once != expected:
-        missing_ids = [cases[index].tc_id for index in sorted(expected - assigned_once)]
+    if covered_once != expected:
+        missing_ids = [cases[index].tc_id for index in sorted(expected - covered_once)]
         raise SystemExit(
-            "first-pass output does not assign every testcase; missing: "
+            "first-pass output does not cover every testcase; missing: "
             + ", ".join(missing_ids)
         )
     return fieldnames, active_columns, groups
@@ -281,14 +272,14 @@ def merge_attempt(
     return candidate, "compatible"
 
 
-def assigned_testcase_failure(
+def covered_testcase_failure(
     candidate: dict[str, tuple[str, ...]],
-    assigned_indices: list[int],
+    covered_indices: list[int],
     requirement_columns: list[str],
     cases: list[TestCase],
     support,
 ) -> str | None:
-    for index in assigned_indices:
+    for index in covered_indices:
         case = cases[index]
         matches, _ = coverage_delta(
             requirement_columns,
@@ -308,12 +299,12 @@ def assigned_testcase_failure(
             )
             if not column_matches:
                 return (
-                    f"assigned_testcase_coverage tc_id={case.tc_id} "
+                    f"covered_testcase_coverage tc_id={case.tc_id} "
                     f"column={column!r} "
                     f"candidate={render_cell(candidate[column])!r} "
                     f"requirement={render_cell(case.tokens[column])!r}"
                 )
-        return f"assigned_testcase_coverage tc_id={case.tc_id}"
+        return f"covered_testcase_coverage tc_id={case.tc_id}"
     return None
 
 
@@ -356,12 +347,12 @@ def merge_small_groups(
                         )
                     continue
 
-                assigned_indices = sorted(
-                    set(left.assigned_indices + right.assigned_indices)
+                covered_indices = sorted(
+                    set(left.covered_indices + right.covered_indices)
                 )
-                failure = assigned_testcase_failure(
+                failure = covered_testcase_failure(
                     candidate,
-                    assigned_indices,
+                    covered_indices,
                     requirement_columns,
                     cases,
                     support,
@@ -375,7 +366,7 @@ def merge_small_groups(
                     continue
 
                 left.spec = candidate
-                left.assigned_indices = assigned_indices
+                left.covered_indices = covered_indices
                 active.remove(right)
                 merged_count += 1
                 if verbose:
@@ -383,8 +374,8 @@ def merge_small_groups(
                         f"MERGE target={left_name} source={right_name} "
                         f"condition={reason}"
                     )
-                    assigned_ids = " + ".join(
-                        cases[index].tc_id for index in assigned_indices
+                    covered_ids = " + ".join(
+                        cases[index].tc_id for index in covered_indices
                     )
                     rendered_spec = " ".join(
                         f"{column}={render_cell(candidate[column])!r}"
@@ -392,7 +383,7 @@ def merge_small_groups(
                     )
                     print(
                         f"NEW_SPEC target={left_name} "
-                        f"assigned_tc_ids={assigned_ids} {rendered_spec}"
+                        f"covered_tc_ids={covered_ids} {rendered_spec}"
                     )
                 merged = True
                 break
@@ -412,7 +403,7 @@ def validate_merged_groups(
 ) -> list[tuple[SpecGroup, TestCase]]:
     failures: list[tuple[SpecGroup, TestCase]] = []
     for group in groups:
-        for index in group.assigned_indices:
+        for index in group.covered_indices:
             case = cases[index]
             matches, _ = coverage_delta(
                 requirement_columns,
@@ -441,8 +432,8 @@ def write_groups(
         groups,
         key=lambda group: (
             equipment_count(requirement_columns, group.spec),
-            -len(group.assigned_indices),
-            min(group.assigned_indices),
+            -len(group.covered_indices),
+            min(group.covered_indices),
         ),
     )
 
@@ -451,9 +442,8 @@ def write_groups(
         writer.writeheader()
         for number, group in enumerate(sorted_groups, start=1):
             covered: list[int] = []
-            delta_by_case: dict[int, int] = {}
             for case in cases:
-                ok, delta = coverage_delta(
+                ok, _ = coverage_delta(
                     requirement_columns,
                     group.spec,
                     case,
@@ -462,19 +452,14 @@ def write_groups(
                 )
                 if ok:
                     covered.append(case.index)
-                    delta_by_case[case.index] = delta
 
-            assigned = sorted(group.assigned_indices)
             row = {
                 "spec_id": f"spec_{number}",
-                "assigned_tc_ids": " + ".join(cases[index].tc_id for index in assigned),
-                "assigned_count": len(assigned),
                 "covered_tc_ids": " + ".join(cases[index].tc_id for index in covered),
                 "covered_count": len(covered),
                 "equipment_count": equipment_count(
                     requirement_columns, group.spec
                 ),
-                "total_delta": sum(delta_by_case[index] for index in assigned),
                 "solve_status": "SECOND_PASS",
             }
             for column in output_requirement_columns:
@@ -529,7 +514,7 @@ def main() -> int:
             f"target_spec=spec_{group.original_order + 1}"
         )
     if validation_failures:
-        raise SystemExit("merged specs do not satisfy all assigned testcase requirements")
+        raise SystemExit("merged specs do not satisfy all covered testcase requirements")
 
     write_groups(
         Path(args.output),

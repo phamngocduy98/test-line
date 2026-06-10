@@ -96,12 +96,6 @@ def parse_args() -> argparse.Namespace:
         help="Pass --ignore-tech-and-ue-capa to the solver.",
     )
     parser.add_argument(
-        "--max-tc-per-spec",
-        type=int,
-        default=338,
-        help="Passed through to solve_test_lines.py. Default: 338.",
-    )
-    parser.add_argument(
         "--variation",
         choices=("low", "medium", "high"),
         default="medium",
@@ -311,8 +305,6 @@ def run_solver(args: argparse.Namespace) -> int:
         str(args.max_candidates_per_bucket),
         "--max-cover-checks-per-candidate",
         str(args.max_cover_checks_per_candidate),
-        "--max-tc-per-spec",
-        str(args.max_tc_per_spec),
     ]
     if args.ignore_tech_and_ue_capa:
         command.append("--ignore-tech-and-ue-capa")

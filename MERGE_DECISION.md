@@ -6,7 +6,7 @@ implemented by `merge_output_specs.py`.
 ## Purpose
 
 The merge pass compacts the first-pass output from `solve_test_lines.py` by
-transferring compatible testcase assignments into fewer test line specs.
+transferring compatible testcase coverages into fewer test line specs.
 
 It reads:
 
@@ -42,7 +42,7 @@ Each active pair produces a combined candidate across all requirement fields.
 - Single-select conflicts reject the candidate.
 
 The earlier group identity is retained, its spec is replaced by the combined
-candidate, and the later group's assignments are transferred into it.
+candidate, and the later group's coverages are transferred into it.
 
 ### Candidate Limits
 
@@ -66,9 +66,9 @@ candidate physically valid:
 - literal `inter` and `intra` tokens remain in the output;
 - unrelated supported bands are not added to the candidate.
 
-The candidate must cover both original specs and every testcase assigned to
+The candidate must cover both original specs and every testcase covered by
 either group with the solver's delta restriction disabled. Validating the
-assigned testcases directly is required because coverage is not transitive when
+covered testcases directly is required because coverage is not transitive when
 a prior spec contains `any` and the combined candidate selects a concrete value.
 An incompatible candidate is rejected before either group is mutated.
 
@@ -80,7 +80,7 @@ This allows a newly expanded candidate to merge with additional specs.
 
 ### Final Validation
 
-After merging finishes, every assigned testcase is checked against its final
+After merging finishes, every covered testcase is checked against its final
 spec with the delta restriction disabled.
 
 The program prints:
@@ -103,7 +103,7 @@ Verbose output includes:
 - `FAIL` with the first candidate-construction, capacity, RU-band, relation, or
   coverage failure;
 - `MERGE` when the combined candidate is accepted;
-- `NEW_SPEC` with the combined testcase IDs and every rendered requirement
+- `NEW_SPEC` with the combined covered testcase IDs and every rendered requirement
   field after an accepted merge.
 
 Example:
@@ -111,8 +111,8 @@ Example:
 ```text
 FAIL left=spec_1 right=spec_2 condition=max_ru actual=4 limit=3
 FAIL left=spec_1 right=spec_2 condition=max_ue actual=12 limit=10
-FAIL left=spec_1 right=spec_2 condition=assigned_testcase_coverage tc_id=A column='ru' candidate='rf-1' requirement='rf-2'
-NEW_SPEC target=spec_1 assigned_tc_ids=A + B ru='rf-1' enb='1'
+FAIL left=spec_1 right=spec_2 condition=covered_testcase_coverage tc_id=A column='ru' candidate='rf-1' requirement='rf-2'
+NEW_SPEC target=spec_1 covered_tc_ids=A + B ru='rf-1' enb='1'
 ```
 
 ## Failure Handling
@@ -120,10 +120,10 @@ NEW_SPEC target=spec_1 assigned_tc_ids=A + B ru='rf-1' enb='1'
 The pass stops with an error when:
 
 - required input columns are missing;
-- a testcase ID is unknown, duplicated across specs, or unassigned;
+- a testcase ID is unknown or uncovered;
 - solver output contains requirement columns absent from testcase input;
 - `--max-ru`, `--max-du`, or `--max-ue` is negative;
-- final merged assignments do not satisfy their testcase requirements.
+- final merged coverages do not satisfy their testcase requirements.
 
 Merge incompatibility is not an execution error. The two specs remain separate.
 
@@ -138,16 +138,13 @@ using stable deterministic keys.
 The output preserves first-pass columns:
 
 - `spec_id`
-- `assigned_tc_ids`
-- `assigned_count`
 - `covered_tc_ids`
 - `covered_count`
 - `equipment_count`
-- `total_delta`
 - `solve_status`
 - all requirement columns
 
-`covered_tc_ids` and `total_delta` are recalculated with the delta restriction
+`covered_tc_ids` is recalculated with the delta restriction
 disabled. Output spec IDs are reassigned after final sorting.
 
 ## Required Test Coverage
