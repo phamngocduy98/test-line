@@ -1,4 +1,5 @@
 import csv
+import io
 import tempfile
 import unittest
 from pathlib import Path
@@ -9,6 +10,7 @@ from merge_output_specs import (
     du_count,
     load_groups,
     main,
+    merge_attempt,
     merge_small_groups,
     parse_args,
     ru_count,
@@ -220,6 +222,53 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
 
+    def test_merge_attempt_reports_failed_column(self) -> None:
+        target = SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)})
+        source = SpecGroup(1, [1], {"ru": ("rf-2",), "enb": ("1",)})
+
+        matches, reason = merge_attempt(
+            source,
+            target,
+            ["ru", "enb"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+        )
+
+        self.assertFalse(matches)
+        self.assertEqual(
+            reason,
+            "column='ru' target='rf-1' source='rf-2'",
+        )
+
+    def test_verbose_merge_logs_both_directions_and_failure(self) -> None:
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
+            SpecGroup(1, [1], {"ru": ("rf-2",), "enb": ("1",)}),
+        ]
+        output = io.StringIO()
+
+        with patch("sys.stdout", output):
+            merged, count = merge_small_groups(
+                groups,
+                ["ru", "enb"],
+                make_support(),
+                max_ru=3,
+                max_du=3,
+                verbose=True,
+            )
+
+        self.assertEqual(count, 0)
+        self.assertEqual(len(merged), 2)
+        log = output.getvalue()
+        self.assertIn("TRY target=spec_1 source=spec_2", log)
+        self.assertIn(
+            "FAIL target=spec_1 source=spec_2 "
+            "condition=column='ru' target='rf-1' source='rf-2'",
+            log,
+        )
+        self.assertIn("TRY target=spec_2 source=spec_1", log)
+
     def test_final_validation_reports_unsatisfied_assigned_case(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-1", enb="1", **{"lte band": "b2"}),
@@ -277,6 +326,20 @@ class MergeIoTests(unittest.TestCase):
             args = parse_args()
         self.assertEqual(args.max_ru, 3)
         self.assertEqual(args.max_du, 3)
+        self.assertFalse(args.verbose)
+
+    def test_parse_args_accepts_verbose_short_option(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                "merge_output_specs.py",
+                "--ru-band-support",
+                "support.csv",
+                "-v",
+            ],
+        ):
+            args = parse_args()
+        self.assertTrue(args.verbose)
 
     def test_main_writes_compacted_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

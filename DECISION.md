@@ -267,6 +267,8 @@ target and prints the validation result.
 
 Use `--max-ru` and `--max-du` to change the target limits. The output uses the
 same columns as the first pass and marks `solve_status` as `SECOND_PASS`.
+Use `-v` or `--verbose` to log both directions of every merge attempt and the
+first failed target limit, RU-band compatibility check, or requirement column.
 
 ## Verification
 
