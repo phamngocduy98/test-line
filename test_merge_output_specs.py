@@ -14,6 +14,7 @@ from merge_output_specs import (
     merge_small_groups,
     parse_args,
     ru_count,
+    ue_count,
     validate_merged_groups,
 )
 from solve_test_lines import RuBandSupport, TestCase, parse_cell
@@ -32,12 +33,15 @@ def make_support() -> RuBandSupport:
     return RuBandSupport(
         ru_names={"rf-1": "rf-1", "rf-2": "rf-2"},
         lte_band_names={"b1": "b1", "b2": "b2"},
-        nr_band_names={},
+        nr_band_names={"n1": "n1", "n2": "n2"},
         lte_by_ru={
             "rf-1": frozenset({"b1", "b2"}),
             "rf-2": frozenset({"b2"}),
         },
-        nr_by_ru={"rf-1": frozenset(), "rf-2": frozenset()},
+        nr_by_ru={
+            "rf-1": frozenset({"n1", "n2"}),
+            "rf-2": frozenset({"n2"}),
+        },
     )
 
 
@@ -52,6 +56,8 @@ class MergeHelpersTests(unittest.TestCase):
         }
         self.assertEqual(ru_count(spec), 2)
         self.assertEqual(du_count(spec), 4)
+        self.assertEqual(ue_count({"ue": ("3",)}), 3)
+        self.assertEqual(ue_count({}), 0)
 
     def test_broader_target_absorbs_equal_size_source(self) -> None:
         cases = [
@@ -109,8 +115,9 @@ class MergeHelpersTests(unittest.TestCase):
 
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
-        self.assertEqual(merged[0].original_order, 1)
+        self.assertEqual(merged[0].original_order, 0)
         self.assertEqual(merged[0].assigned_indices, [0, 1])
+        self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1"))
 
     def test_equivalent_specs_keep_earlier_input_spec(self) -> None:
         groups = [
@@ -156,8 +163,9 @@ class MergeHelpersTests(unittest.TestCase):
 
         self.assertEqual(count, 2)
         self.assertEqual(len(merged), 1)
-        self.assertEqual(merged[0].original_order, 2)
+        self.assertEqual(merged[0].original_order, 0)
         self.assertEqual(merged[0].assigned_indices, [0, 1, 2])
+        self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1", "rf-1"))
 
     def test_ru_limit_rejects_merge(self) -> None:
         cases = [
@@ -222,26 +230,232 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
 
-    def test_merge_attempt_reports_failed_column(self) -> None:
-        target = SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)})
-        source = SpecGroup(1, [1], {"ru": ("rf-2",), "enb": ("1",)})
+    def test_merge_attempt_extends_supported_bands(self) -> None:
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b2",)},
+        )
 
-        matches, reason = merge_attempt(
-            source,
-            target,
-            ["ru", "enb"],
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "enb", "lte band"],
             make_support(),
             max_ru=3,
             max_du=3,
+            max_ue=10,
         )
 
-        self.assertFalse(matches)
+        self.assertEqual(reason, "compatible")
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["lte band"], ("b1", "b2"))
+
+    def test_merge_attempt_extends_supported_nr_bands(self) -> None:
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-1",), "nr band": ("n1",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-1",), "nr band": ("n2",)},
+        )
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "nr band"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+            max_ue=10,
+        )
+
+        self.assertEqual(reason, "compatible")
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["nr band"], ("n1", "n2"))
+
+    def test_merge_rejects_unsupported_combined_band(self) -> None:
+        support = make_support()
+        support.lte_by_ru["rf-1"] = frozenset({"b1"})
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-1",), "lte band": ("b1",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-1",), "lte band": ("b2",)},
+        )
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "lte band"],
+            support,
+            max_ru=3,
+            max_du=3,
+            max_ue=10,
+        )
+
+        self.assertIsNone(candidate)
+        self.assertEqual(reason, "ru_band_compatibility")
+
+    def test_merge_uses_max_ue_with_limit(self) -> None:
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "ue": ("2",)}),
+            SpecGroup(1, [1], {"ru": ("rf-1",), "ue": ("4",)}),
+        ]
+
+        merged, count = merge_small_groups(
+            groups,
+            ["ru", "ue"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+            max_ue=4,
+        )
+
+        self.assertEqual(count, 1)
+        self.assertEqual(merged[0].spec["ue"], ("4",))
+
+    def test_ue_limit_rejects_combined_candidate(self) -> None:
+        left = SpecGroup(0, [0], {"ru": ("rf-1",), "ue": ("2",)})
+        right = SpecGroup(1, [1], {"ru": ("rf-1",), "ue": ("4",)})
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "ue"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+            max_ue=3,
+        )
+
+        self.assertIsNone(candidate)
+        self.assertEqual(reason, "max_ue actual=4 limit=3")
+
+    def test_inter_relation_requires_two_supported_bands(self) -> None:
+        support = make_support()
+        support.lte_by_ru["rf-2"] = frozenset({"b2"})
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-2",), "lte band": ("inter",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-2",), "lte band": ("b2",)},
+        )
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "lte band"],
+            support,
+            max_ru=3,
+            max_du=3,
+            max_ue=10,
+        )
+
+        self.assertIsNone(candidate)
         self.assertEqual(
             reason,
-            "column='ru' target='rf-1' source='rf-2'",
+            "relation column='lte band' relation='inter'",
         )
 
-    def test_verbose_merge_logs_both_directions_and_failure(self) -> None:
+    def test_intra_relation_requires_a_supported_band(self) -> None:
+        support = make_support()
+        support.nr_by_ru["rf-2"] = frozenset()
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-2",), "nr band": ("intra",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-2",), "nr band": ()},
+        )
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "nr band"],
+            support,
+            max_ru=3,
+            max_du=3,
+            max_ue=10,
+        )
+
+        self.assertIsNone(candidate)
+        self.assertEqual(
+            reason,
+            "relation column='nr band' relation='intra'",
+        )
+
+    def test_relation_token_is_preserved_in_candidate(self) -> None:
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-1",), "lte band": ("inter",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-1",), "lte band": ("b1",)},
+        )
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "lte band"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+            max_ue=10,
+        )
+
+        self.assertEqual(reason, "compatible")
+        self.assertIsNotNone(candidate)
+        self.assertEqual(candidate["lte band"], ("inter", "b1"))
+
+    def test_single_select_conflict_rejects_candidate(self) -> None:
+        left = SpecGroup(
+            0,
+            [0],
+            {"ru": ("rf-1",), "cc location": ("local",)},
+        )
+        right = SpecGroup(
+            1,
+            [1],
+            {"ru": ("rf-1",), "cc location": ("remote",)},
+        )
+
+        candidate, reason = merge_attempt(
+            left,
+            right,
+            ["ru", "cc location"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+            max_ue=10,
+        )
+
+        self.assertIsNone(candidate)
+        self.assertEqual(reason, "merge_conflict column='cc location'")
+
+    def test_verbose_merge_logs_pair_and_failure(self) -> None:
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
             SpecGroup(1, [1], {"ru": ("rf-2",), "enb": ("1",)}),
@@ -253,7 +467,7 @@ class MergeHelpersTests(unittest.TestCase):
                 groups,
                 ["ru", "enb"],
                 make_support(),
-                max_ru=3,
+                max_ru=1,
                 max_du=3,
                 verbose=True,
             )
@@ -261,13 +475,12 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
         log = output.getvalue()
-        self.assertIn("TRY target=spec_1 source=spec_2", log)
+        self.assertIn("TRY left=spec_1 right=spec_2", log)
         self.assertIn(
-            "FAIL target=spec_1 source=spec_2 "
-            "condition=column='ru' target='rf-1' source='rf-2'",
+            "FAIL left=spec_1 right=spec_2 "
+            "condition=max_ru actual=2 limit=1",
             log,
         )
-        self.assertIn("TRY target=spec_2 source=spec_1", log)
 
     def test_final_validation_reports_unsatisfied_assigned_case(self) -> None:
         cases = [
@@ -326,6 +539,7 @@ class MergeIoTests(unittest.TestCase):
             args = parse_args()
         self.assertEqual(args.max_ru, 3)
         self.assertEqual(args.max_du, 3)
+        self.assertEqual(args.max_ue, 10)
         self.assertFalse(args.verbose)
 
     def test_parse_args_accepts_verbose_short_option(self) -> None:
@@ -340,6 +554,20 @@ class MergeIoTests(unittest.TestCase):
         ):
             args = parse_args()
         self.assertTrue(args.verbose)
+
+    def test_main_rejects_negative_max_ue(self) -> None:
+        with patch(
+            "sys.argv",
+            [
+                "merge_output_specs.py",
+                "--ru-band-support",
+                "support.csv",
+                "--max-ue",
+                "-1",
+            ],
+        ):
+            with self.assertRaisesRegex(SystemExit, "--max-ue must be non-negative"):
+                main()
 
     def test_main_writes_compacted_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

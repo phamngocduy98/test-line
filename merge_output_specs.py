@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Merge covered solve_test_lines.py specs into eligible target specs."""
+"""Build combined second-pass specs from compatible solver output groups."""
 
 from __future__ import annotations
 
@@ -12,15 +12,19 @@ from pathlib import Path
 from solve_test_lines import (
     DU_COLUMNS,
     RU_COLUMN,
+    UE_COLUMN,
     TestCase,
-    covers_column,
+    alternatives,
     coverage_delta,
     equipment_count,
+    is_any,
     load_cases,
     load_ru_band_support,
+    merge_column,
     numeric_equipment,
     parse_cell,
     render_cell,
+    split_band_tokens,
     spec_has_compatible_ru_bands,
 )
 
@@ -46,7 +50,7 @@ class SpecGroup:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Merge covered solver output specs into eligible target specs."
+        description="Build combined second-pass specs from compatible solver output."
     )
     parser.add_argument(
         "--input",
@@ -81,6 +85,12 @@ def parse_args() -> argparse.Namespace:
         help="Maximum total enb+vdu+au+cu capacity in a resulting target spec. Default: 3.",
     )
     parser.add_argument(
+        "--max-ue",
+        type=int,
+        default=10,
+        help="Maximum UE capacity in a resulting spec. Default: 10.",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -99,6 +109,10 @@ def ru_count(spec: dict[str, tuple[str, ...]]) -> int:
 
 def du_count(spec: dict[str, tuple[str, ...]]) -> int:
     return sum(numeric_equipment(spec.get(column, ())) for column in DU_COLUMNS)
+
+
+def ue_count(spec: dict[str, tuple[str, ...]]) -> int:
+    return numeric_equipment(spec.get(UE_COLUMN, ()))
 
 
 def load_groups(
@@ -183,41 +197,87 @@ def group_as_requirement(
     )
 
 
+def relation_failure(
+    spec: dict[str, tuple[str, ...]],
+    support,
+) -> str | None:
+    ru_tokens = spec.get(RU_COLUMN, ())
+    if ru_tokens:
+        selected_rus = {
+            value
+            for token in ru_tokens
+            if not is_any(token)
+            for value in alternatives(token)
+        }
+    else:
+        selected_rus = set(support.ru_names)
+
+    for column, support_by_ru in (
+        ("lte band", support.lte_by_ru),
+        ("nr band", support.nr_by_ru),
+    ):
+        if column not in spec:
+            continue
+        _, relations, _ = split_band_tokens(spec[column])
+        if not relations:
+            continue
+        supported_bands = set().union(
+            *(support_by_ru.get(ru, frozenset()) for ru in selected_rus)
+        )
+        if "intra" in relations and not supported_bands:
+            return f"relation column={column!r} relation='intra'"
+        if "inter" in relations and len(supported_bands) < 2:
+            return f"relation column={column!r} relation='inter'"
+    return None
+
+
 def merge_attempt(
-    source: SpecGroup,
-    target: SpecGroup,
+    left: SpecGroup,
+    right: SpecGroup,
     requirement_columns: list[str],
     support,
     max_ru: int,
     max_du: int,
-) -> tuple[bool, str]:
-    target_du = du_count(target.spec)
-    if target_du > max_du:
-        return False, f"max_du actual={target_du} limit={max_du}"
-
-    target_ru = ru_count(target.spec)
-    if target_ru > max_ru:
-        return False, f"max_ru actual={target_ru} limit={max_ru}"
-
-    if not spec_has_compatible_ru_bands(target.spec, support):
-        return False, "target_ru_band_compatibility"
-
-    source_requirement = group_as_requirement(source, requirement_columns)
+    max_ue: int,
+) -> tuple[dict[str, tuple[str, ...]] | None, str]:
+    candidate: dict[str, tuple[str, ...]] = {}
     for column in requirement_columns:
-        matches, _ = covers_column(
-            column,
-            target.spec[column],
-            source_requirement.tokens[column],
+        merged = merge_column(column, (left.spec[column], right.spec[column]))
+        if merged is None:
+            return None, f"merge_conflict column={column!r}"
+        candidate[column] = merged
+
+    candidate_du = du_count(candidate)
+    if candidate_du > max_du:
+        return None, f"max_du actual={candidate_du} limit={max_du}"
+
+    candidate_ru = ru_count(candidate)
+    if candidate_ru > max_ru:
+        return None, f"max_ru actual={candidate_ru} limit={max_ru}"
+
+    candidate_ue = ue_count(candidate)
+    if candidate_ue > max_ue:
+        return None, f"max_ue actual={candidate_ue} limit={max_ue}"
+
+    if not spec_has_compatible_ru_bands(candidate, support):
+        return None, "ru_band_compatibility"
+
+    failed_relation = relation_failure(candidate, support)
+    if failed_relation is not None:
+        return None, failed_relation
+
+    for group in (left, right):
+        requirement = group_as_requirement(group, requirement_columns)
+        matches, _ = coverage_delta(
+            requirement_columns,
+            candidate,
+            requirement,
             enforce_delta=False,
+            support=support,
         )
         if not matches:
-            return (
-                False,
-                f"column={column!r} "
-                f"target={render_cell(target.spec[column])!r} "
-                f"source={render_cell(source.spec[column])!r}",
-            )
-    return True, "compatible"
+            return None, f"post_merge_coverage source=spec_{group.original_order + 1}"
+    return candidate, "compatible"
 
 
 def merge_small_groups(
@@ -226,56 +286,48 @@ def merge_small_groups(
     support,
     max_ru: int,
     max_du: int,
+    max_ue: int = 10,
     verbose: bool = False,
 ) -> tuple[list[SpecGroup], int]:
     active = list(groups)
     merged_count = 0
-
-    def check(source: SpecGroup, target: SpecGroup) -> bool:
-        target_name = f"spec_{target.original_order + 1}"
-        source_name = f"spec_{source.original_order + 1}"
-        if verbose:
-            print(f"TRY target={target_name} source={source_name}")
-        matches, reason = merge_attempt(
-            source,
-            target,
-            requirement_columns,
-            support,
-            max_ru,
-            max_du,
-        )
-        if verbose:
-            outcome = "MATCH" if matches else "FAIL"
-            print(
-                f"{outcome} target={target_name} source={source_name} "
-                f"condition={reason}"
-            )
-        return matches
 
     while True:
         merged = False
         ordered = sorted(active, key=lambda group: group.original_order)
         for left_index, left in enumerate(ordered):
             for right in ordered[left_index + 1:]:
-                left_accepts = check(right, left)
-                right_accepts = check(left, right)
-                if not left_accepts and not right_accepts:
+                left_name = f"spec_{left.original_order + 1}"
+                right_name = f"spec_{right.original_order + 1}"
+                if verbose:
+                    print(f"TRY left={left_name} right={right_name}")
+                candidate, reason = merge_attempt(
+                    left,
+                    right,
+                    requirement_columns,
+                    support,
+                    max_ru,
+                    max_du,
+                    max_ue,
+                )
+                if candidate is None:
+                    if verbose:
+                        print(
+                            f"FAIL left={left_name} right={right_name} "
+                            f"condition={reason}"
+                        )
                     continue
 
-                if left_accepts:
-                    target, source = left, right
-                else:
-                    target, source = right, left
-
-                target.assigned_indices = sorted(
-                    set(target.assigned_indices + source.assigned_indices)
+                left.spec = candidate
+                left.assigned_indices = sorted(
+                    set(left.assigned_indices + right.assigned_indices)
                 )
-                active.remove(source)
+                active.remove(right)
                 merged_count += 1
                 if verbose:
                     print(
-                        f"MERGE target=spec_{target.original_order + 1} "
-                        f"source=spec_{source.original_order + 1}"
+                        f"MERGE target={left_name} source={right_name} "
+                        f"condition={reason}"
                     )
                 merged = True
                 break
@@ -371,7 +423,7 @@ def write_groups(
 
 def main() -> int:
     args = parse_args()
-    for name in ("max_ru", "max_du"):
+    for name in ("max_ru", "max_du", "max_ue"):
         if getattr(args, name) < 0:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
 
@@ -393,6 +445,7 @@ def main() -> int:
         support,
         args.max_ru,
         args.max_du,
+        args.max_ue,
         verbose=args.verbose,
     )
     validation_failures = validate_merged_groups(
