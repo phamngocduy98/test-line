@@ -85,6 +85,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb", "lte band"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -96,6 +97,10 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(merged[0].spec["lte band"], ("b1", "b2"))
 
     def test_later_broader_spec_absorbs_earlier_smaller_spec(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1"),
+            make_case(1, "B", ru="rf-1 + rf-1", enb="1"),
+        ]
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
             SpecGroup(
@@ -108,6 +113,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -120,6 +126,10 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1"))
 
     def test_equivalent_specs_keep_earlier_input_spec(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1"),
+            make_case(1, "B", ru="rf-1", enb="1"),
+        ]
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
             SpecGroup(1, [1], {"ru": ("rf-1",), "enb": ("1",)}),
@@ -128,6 +138,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -139,6 +150,11 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(merged[0].assigned_indices, [0, 1])
 
     def test_bubble_merge_restarts_after_each_merge(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1"),
+            make_case(1, "B", ru="rf-1 + rf-1", enb="1"),
+            make_case(2, "C", ru="rf-1 + rf-1 + rf-1", enb="1"),
+        ]
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
             SpecGroup(
@@ -156,6 +172,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -180,6 +197,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
+            cases,
             make_support(),
             max_ru=1,
             max_du=3,
@@ -200,6 +218,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -223,6 +242,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -310,6 +330,10 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(reason, "ru_band_compatibility")
 
     def test_merge_uses_max_ue_with_limit(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", ue="2"),
+            make_case(1, "B", ru="rf-1", ue="4"),
+        ]
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "ue": ("2",)}),
             SpecGroup(1, [1], {"ru": ("rf-1",), "ue": ("4",)}),
@@ -318,6 +342,7 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "ue"],
+            cases,
             make_support(),
             max_ru=3,
             max_du=3,
@@ -456,6 +481,10 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(reason, "merge_conflict column='cc location'")
 
     def test_verbose_merge_logs_pair_and_failure(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1"),
+            make_case(1, "B", ru="rf-2", enb="1"),
+        ]
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
             SpecGroup(1, [1], {"ru": ("rf-2",), "enb": ("1",)}),
@@ -466,6 +495,7 @@ class MergeHelpersTests(unittest.TestCase):
             merged, count = merge_small_groups(
                 groups,
                 ["ru", "enb"],
+                cases,
                 make_support(),
                 max_ru=1,
                 max_du=3,
@@ -480,6 +510,74 @@ class MergeHelpersTests(unittest.TestCase):
             "FAIL left=spec_1 right=spec_2 "
             "condition=max_ru actual=2 limit=1",
             log,
+        )
+
+    def test_merge_rejects_candidate_that_loses_assigned_any_coverage(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-2"),
+            make_case(1, "B", ru="rf-1"),
+        ]
+        groups = [
+            SpecGroup(0, [0], {"ru": ("any",)}),
+            SpecGroup(1, [1], {"ru": ("rf-1",)}),
+        ]
+        original_specs = [dict(group.spec) for group in groups]
+        original_assignments = [list(group.assigned_indices) for group in groups]
+        output = io.StringIO()
+
+        with patch("sys.stdout", output):
+            merged, count = merge_small_groups(
+                groups,
+                ["ru"],
+                cases,
+                make_support(),
+                max_ru=3,
+                max_du=3,
+                verbose=True,
+            )
+
+        self.assertEqual(count, 0)
+        self.assertEqual(len(merged), 2)
+        self.assertEqual([group.spec for group in groups], original_specs)
+        self.assertEqual(
+            [group.assigned_indices for group in groups],
+            original_assignments,
+        )
+        self.assertIn(
+            "FAIL left=spec_1 right=spec_2 "
+            "condition=assigned_testcase_coverage tc_id=A column='ru' "
+            "candidate='rf-1' requirement='rf-2'",
+            output.getvalue(),
+        )
+
+    def test_verbose_merge_logs_complete_new_spec(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1"),
+            make_case(1, "B", ru="rf-1", enb="2"),
+        ]
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
+            SpecGroup(1, [1], {"ru": ("rf-1",), "enb": ("2",)}),
+        ]
+        output = io.StringIO()
+
+        with patch("sys.stdout", output):
+            merged, count = merge_small_groups(
+                groups,
+                ["ru", "enb"],
+                cases,
+                make_support(),
+                max_ru=3,
+                max_du=3,
+                verbose=True,
+            )
+
+        self.assertEqual(count, 1)
+        self.assertEqual(len(merged), 1)
+        self.assertIn(
+            "NEW_SPEC target=spec_1 assigned_tc_ids=A + B "
+            "ru='rf-1' enb='2'",
+            output.getvalue(),
         )
 
     def test_final_validation_reports_unsatisfied_assigned_case(self) -> None:

@@ -66,8 +66,11 @@ candidate physically valid:
 - literal `inter` and `intra` tokens remain in the output;
 - unrelated supported bands are not added to the candidate.
 
-The candidate must cover both original specs with the solver's delta restriction
-disabled.
+The candidate must cover both original specs and every testcase assigned to
+either group with the solver's delta restriction disabled. Validating the
+assigned testcases directly is required because coverage is not transitive when
+a prior spec contains `any` and the combined candidate selects a concrete value.
+An incompatible candidate is rejected before either group is mutated.
 
 ### Fixed-Point Scan
 
@@ -99,13 +102,17 @@ Verbose output includes:
 - `TRY` for an attempted target/source direction;
 - `FAIL` with the first candidate-construction, capacity, RU-band, relation, or
   coverage failure;
-- `MERGE` when the combined candidate is accepted.
+- `MERGE` when the combined candidate is accepted;
+- `NEW_SPEC` with the combined testcase IDs and every rendered requirement
+  field after an accepted merge.
 
 Example:
 
 ```text
 FAIL left=spec_1 right=spec_2 condition=max_ru actual=4 limit=3
 FAIL left=spec_1 right=spec_2 condition=max_ue actual=12 limit=10
+FAIL left=spec_1 right=spec_2 condition=assigned_testcase_coverage tc_id=A column='ru' candidate='rf-1' requirement='rf-2'
+NEW_SPEC target=spec_1 assigned_tc_ids=A + B ru='rf-1' enb='1'
 ```
 
 ## Failure Handling

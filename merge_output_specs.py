@@ -16,6 +16,7 @@ from solve_test_lines import (
     TestCase,
     alternatives,
     coverage_delta,
+    covers_column,
     equipment_count,
     is_any,
     load_cases,
@@ -280,9 +281,46 @@ def merge_attempt(
     return candidate, "compatible"
 
 
+def assigned_testcase_failure(
+    candidate: dict[str, tuple[str, ...]],
+    assigned_indices: list[int],
+    requirement_columns: list[str],
+    cases: list[TestCase],
+    support,
+) -> str | None:
+    for index in assigned_indices:
+        case = cases[index]
+        matches, _ = coverage_delta(
+            requirement_columns,
+            candidate,
+            case,
+            enforce_delta=False,
+            support=support,
+        )
+        if matches:
+            continue
+        for column in requirement_columns:
+            column_matches, _ = covers_column(
+                column,
+                candidate[column],
+                case.tokens[column],
+                enforce_delta=False,
+            )
+            if not column_matches:
+                return (
+                    f"assigned_testcase_coverage tc_id={case.tc_id} "
+                    f"column={column!r} "
+                    f"candidate={render_cell(candidate[column])!r} "
+                    f"requirement={render_cell(case.tokens[column])!r}"
+                )
+        return f"assigned_testcase_coverage tc_id={case.tc_id}"
+    return None
+
+
 def merge_small_groups(
     groups: list[SpecGroup],
     requirement_columns: list[str],
+    cases: list[TestCase],
     support,
     max_ru: int,
     max_du: int,
@@ -318,16 +356,43 @@ def merge_small_groups(
                         )
                     continue
 
-                left.spec = candidate
-                left.assigned_indices = sorted(
+                assigned_indices = sorted(
                     set(left.assigned_indices + right.assigned_indices)
                 )
+                failure = assigned_testcase_failure(
+                    candidate,
+                    assigned_indices,
+                    requirement_columns,
+                    cases,
+                    support,
+                )
+                if failure is not None:
+                    if verbose:
+                        print(
+                            f"FAIL left={left_name} right={right_name} "
+                            f"condition={failure}"
+                        )
+                    continue
+
+                left.spec = candidate
+                left.assigned_indices = assigned_indices
                 active.remove(right)
                 merged_count += 1
                 if verbose:
                     print(
                         f"MERGE target={left_name} source={right_name} "
                         f"condition={reason}"
+                    )
+                    assigned_ids = " + ".join(
+                        cases[index].tc_id for index in assigned_indices
+                    )
+                    rendered_spec = " ".join(
+                        f"{column}={render_cell(candidate[column])!r}"
+                        for column in requirement_columns
+                    )
+                    print(
+                        f"NEW_SPEC target={left_name} "
+                        f"assigned_tc_ids={assigned_ids} {rendered_spec}"
                     )
                 merged = True
                 break
@@ -442,6 +507,7 @@ def main() -> int:
     merged_groups, merged_count = merge_small_groups(
         groups,
         requirement_columns,
+        cases,
         support,
         args.max_ru,
         args.max_du,
