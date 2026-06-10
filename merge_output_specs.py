@@ -78,12 +78,6 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Maximum total enb+vdu+au+cu capacity in a resulting target spec. Default: 3.",
     )
-    parser.add_argument(
-        "--max-tc-per-spec",
-        type=int,
-        default=338,
-        help="Maximum assigned testcases in a resulting spec. Default: 338.",
-    )
     return parser.parse_args()
 
 
@@ -185,7 +179,6 @@ def target_accepts_source(
     source: SpecGroup,
     target: SpecGroup,
     requirement_columns: list[str],
-    cases: list[TestCase],
     support,
 ) -> bool:
     source_requirement = group_as_requirement(source, requirement_columns)
@@ -193,31 +186,18 @@ def target_accepts_source(
         requirement_columns,
         target.spec,
         source_requirement,
+        enforce_delta=False,
         support=support,
     )
-    if not source_matches:
-        return False
-
-    combined_indices = set(source.assigned_indices + target.assigned_indices)
-    return all(
-        coverage_delta(
-            requirement_columns,
-            target.spec,
-            cases[index],
-            support=support,
-        )[0]
-        for index in combined_indices
-    )
+    return source_matches
 
 
 def merge_small_groups(
     groups: list[SpecGroup],
     requirement_columns: list[str],
-    cases: list[TestCase],
     support,
     max_ru: int,
     max_du: int,
-    max_tc_per_spec: int,
 ) -> tuple[list[SpecGroup], int]:
     active = list(groups)
     merged_count = 0
@@ -242,16 +222,10 @@ def merge_small_groups(
             key=lambda group: (len(group.assigned_indices), group.original_order),
         )
         for source in sources:
-            if (
-                len(target.assigned_indices) + len(source.assigned_indices)
-                > max_tc_per_spec
-            ):
-                continue
             if not target_accepts_source(
                 source,
                 target,
                 requirement_columns,
-                cases,
                 support,
             ):
                 continue
@@ -262,6 +236,28 @@ def merge_small_groups(
             merged_count += 1
 
     return active, merged_count
+
+
+def validate_merged_groups(
+    groups: list[SpecGroup],
+    requirement_columns: list[str],
+    cases: list[TestCase],
+    support,
+) -> list[tuple[SpecGroup, TestCase]]:
+    failures: list[tuple[SpecGroup, TestCase]] = []
+    for group in groups:
+        for index in group.assigned_indices:
+            case = cases[index]
+            matches, _ = coverage_delta(
+                requirement_columns,
+                group.spec,
+                case,
+                enforce_delta=False,
+                support=support,
+            )
+            if not matches:
+                failures.append((group, case))
+    return failures
 
 
 def write_groups(
@@ -295,6 +291,7 @@ def write_groups(
                     requirement_columns,
                     group.spec,
                     case,
+                    enforce_delta=False,
                     support=support,
                 )
                 if ok:
@@ -325,8 +322,6 @@ def write_groups(
 
 def main() -> int:
     args = parse_args()
-    if args.max_tc_per_spec <= 0:
-        raise SystemExit("--max-tc-per-spec must be positive")
     for name in ("max_ru", "max_du"):
         if getattr(args, name) < 0:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
@@ -346,12 +341,27 @@ def main() -> int:
     merged_groups, merged_count = merge_small_groups(
         groups,
         requirement_columns,
-        cases,
         support,
         args.max_ru,
         args.max_du,
-        args.max_tc_per_spec,
     )
+    validation_failures = validate_merged_groups(
+        merged_groups,
+        requirement_columns,
+        cases,
+        support,
+    )
+
+    print(f"merged_requirement_check={'PASS' if not validation_failures else 'FAIL'}")
+    print(f"unsatisfied_testcases={len(validation_failures)}")
+    for group, case in validation_failures:
+        print(
+            f"unsatisfied_tc_id={case.tc_id} "
+            f"target_spec=spec_{group.original_order + 1}"
+        )
+    if validation_failures:
+        raise SystemExit("merged specs do not satisfy all assigned testcase requirements")
+
     write_groups(
         Path(args.output),
         fieldnames,

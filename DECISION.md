@@ -258,13 +258,13 @@ python merge_output_specs.py \
 The pass first selects target specs whose existing shape has at most three RU
 slots and total DU capacity of three across `enb`, `vdu`, `au`, and `cu`. It
 treats each other source spec as a testcase requirement and transfers that
-source's assignments when the target covers the complete source spec. Before
-accepting the transfer, it also verifies that every original testcase assigned
-to both specs is still covered by the unchanged target spec.
+source's assignments when the target covers the complete source spec. Coverage
+for this pass has no delta limit. After all compatible specs have been merged,
+the program checks every assigned testcase against its final target and prints
+the validation result.
 
-Use `--max-ru`, `--max-du`, and `--max-tc-per-spec` to change the limits. The
-output uses the same columns as the first pass and marks `solve_status` as
-`SECOND_PASS`.
+Use `--max-ru` and `--max-du` to change the target limits. The output uses the
+same columns as the first pass and marks `solve_status` as `SECOND_PASS`.
 
 ## Verification
 

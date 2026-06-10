@@ -12,6 +12,7 @@ from merge_output_specs import (
     merge_small_groups,
     parse_args,
     ru_count,
+    validate_merged_groups,
 )
 from solve_test_lines import RuBandSupport, TestCase, parse_cell
 
@@ -76,11 +77,9 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb", "lte band"],
-            cases,
             make_support(),
             max_ru=3,
             max_du=3,
-            max_tc_per_spec=10,
         )
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
@@ -101,11 +100,9 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
-            cases,
             make_support(),
             max_ru=1,
             max_du=3,
-            max_tc_per_spec=10,
         )
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
@@ -123,35 +120,55 @@ class MergeHelpersTests(unittest.TestCase):
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb"],
-            cases,
             make_support(),
             max_ru=3,
             max_du=3,
-            max_tc_per_spec=10,
         )
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
 
-    def test_original_testcase_check_can_reject_source_spec_match(self) -> None:
+    def test_merge_ignores_delta_limit(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1"),
+            make_case(1, "B", ru="rf-1 + rf-1 + rf-1", enb="1"),
+        ]
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",)}),
+            SpecGroup(
+                1,
+                [1],
+                {"ru": ("rf-1", "rf-1", "rf-1"), "enb": ("1",)},
+            ),
+        ]
+        merged, count = merge_small_groups(
+            groups,
+            ["ru", "enb"],
+            make_support(),
+            max_ru=3,
+            max_du=3,
+        )
+        self.assertEqual(count, 1)
+        self.assertEqual(len(merged), 1)
+
+    def test_final_validation_reports_unsatisfied_assigned_case(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-1", enb="1", **{"lte band": "b2"}),
             make_case(1, "B", ru="rf-1", enb="1", **{"lte band": "b1"}),
         ]
-        groups = [
-            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)}),
-            SpecGroup(1, [1], {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)}),
-        ]
-        merged, count = merge_small_groups(
-            groups,
+        group = SpecGroup(
+            0,
+            [0, 1],
+            {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)},
+        )
+
+        failures = validate_merged_groups(
+            [group],
             ["ru", "enb", "lte band"],
             cases,
             make_support(),
-            max_ru=3,
-            max_du=3,
-            max_tc_per_spec=10,
         )
-        self.assertEqual(count, 0)
-        self.assertEqual(len(merged), 2)
+
+        self.assertEqual([(item.tc_id) for _, item in failures], ["A"])
 
 
 class MergeIoTests(unittest.TestCase):
@@ -190,7 +207,6 @@ class MergeIoTests(unittest.TestCase):
             args = parse_args()
         self.assertEqual(args.max_ru, 3)
         self.assertEqual(args.max_du, 3)
-        self.assertEqual(args.max_tc_per_spec, 338)
 
     def test_main_writes_compacted_output(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
