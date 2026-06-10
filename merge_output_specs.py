@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Second-pass compaction for solve_test_lines.py output."""
+"""Merge covered solve_test_lines.py specs into eligible target specs."""
 
 from __future__ import annotations
 
@@ -17,11 +17,9 @@ from solve_test_lines import (
     equipment_count,
     load_cases,
     load_ru_band_support,
-    merge_cases,
     numeric_equipment,
     parse_cell,
     render_cell,
-    resolve_compatibility_variants,
 )
 
 
@@ -46,7 +44,7 @@ class SpecGroup:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Merge small solve_test_lines.py output specs into larger specs."
+        description="Merge covered solver output specs into eligible target specs."
     )
     parser.add_argument(
         "--input",
@@ -67,12 +65,6 @@ def parse_args() -> argparse.Namespace:
         "--output",
         default="merged_output_specs.csv",
         help="Second-pass output path. Default: merged_output_specs.csv",
-    )
-    parser.add_argument(
-        "--max-small-tc",
-        type=int,
-        default=3,
-        help="Only specs with at most this many assigned testcases are merge sources.",
     )
     parser.add_argument(
         "--max-ru",
@@ -177,36 +169,45 @@ def load_groups(
     return fieldnames, active_columns, groups
 
 
-def merged_variants(
+def group_as_requirement(
+    group: SpecGroup,
+    requirement_columns: list[str],
+) -> TestCase:
+    return TestCase(
+        index=-1,
+        tc_id=f"spec_{group.original_order}",
+        raw={column: render_cell(group.spec[column]) for column in requirement_columns},
+        tokens=group.spec,
+    )
+
+
+def target_accepts_source(
     source: SpecGroup,
     target: SpecGroup,
     requirement_columns: list[str],
     cases: list[TestCase],
     support,
-    max_ru: int,
-    max_du: int,
-) -> list[dict[str, tuple[str, ...]]]:
-    indices = sorted(set(source.assigned_indices + target.assigned_indices))
-    merged = merge_cases(requirement_columns, (cases[index] for index in indices))
-    if merged is None:
-        return []
+) -> bool:
+    source_requirement = group_as_requirement(source, requirement_columns)
+    source_matches, _ = coverage_delta(
+        requirement_columns,
+        target.spec,
+        source_requirement,
+        support=support,
+    )
+    if not source_matches:
+        return False
 
-    variants = resolve_compatibility_variants(merged, support, max_variants=16)
-    valid: list[dict[str, tuple[str, ...]]] = []
-    for spec in variants:
-        if ru_count(spec) > max_ru or du_count(spec) > max_du:
-            continue
-        if all(
-            coverage_delta(
-                requirement_columns,
-                spec,
-                cases[index],
-                support=support,
-            )[0]
-            for index in indices
-        ):
-            valid.append(spec)
-    return valid
+    combined_indices = set(source.assigned_indices + target.assigned_indices)
+    return all(
+        coverage_delta(
+            requirement_columns,
+            target.spec,
+            cases[index],
+            support=support,
+        )[0]
+        for index in combined_indices
+    )
 
 
 def merge_small_groups(
@@ -214,7 +215,6 @@ def merge_small_groups(
     requirement_columns: list[str],
     cases: list[TestCase],
     support,
-    max_small_tc: int,
     max_ru: int,
     max_du: int,
     max_tc_per_spec: int,
@@ -222,68 +222,44 @@ def merge_small_groups(
     active = list(groups)
     merged_count = 0
 
-    while True:
-        changed = False
+    targets = sorted(
+        (
+            group
+            for group in active
+            if du_count(group.spec) <= max_du and ru_count(group.spec) <= max_ru
+        ),
+        key=lambda group: (
+            -len(group.assigned_indices),
+            -equipment_count(requirement_columns, group.spec),
+            group.original_order,
+        ),
+    )
+    for target in targets:
+        if target not in active:
+            continue
         sources = sorted(
-            (
-                group
-                for group in active
-                if len(group.assigned_indices) <= max_small_tc
-            ),
+            (group for group in active if group is not target),
             key=lambda group: (len(group.assigned_indices), group.original_order),
         )
         for source in sources:
-            if source not in active:
+            if (
+                len(target.assigned_indices) + len(source.assigned_indices)
+                > max_tc_per_spec
+            ):
                 continue
-            targets = sorted(
-                (
-                    target
-                    for target in active
-                    if target is not source
-                    and len(target.assigned_indices) > len(source.assigned_indices)
-                    and len(target.assigned_indices) + len(source.assigned_indices)
-                    <= max_tc_per_spec
-                ),
-                key=lambda target: (
-                    -len(target.assigned_indices),
-                    target.original_order,
-                ),
-            )
-
-            choices: list[
-                tuple[tuple[int, int, int, int], SpecGroup, dict[str, tuple[str, ...]]]
-            ] = []
-            for target in targets:
-                for spec in merged_variants(
-                    source,
-                    target,
-                    requirement_columns,
-                    cases,
-                    support,
-                    max_ru,
-                    max_du,
-                ):
-                    score = (
-                        equipment_count(requirement_columns, spec),
-                        ru_count(spec),
-                        du_count(spec),
-                        target.original_order,
-                    )
-                    choices.append((score, target, spec))
-
-            if not choices:
+            if not target_accepts_source(
+                source,
+                target,
+                requirement_columns,
+                cases,
+                support,
+            ):
                 continue
-            _, target, spec = min(choices, key=lambda choice: choice[0])
             target.assigned_indices = sorted(
                 set(target.assigned_indices + source.assigned_indices)
             )
-            target.spec = spec
             active.remove(source)
             merged_count += 1
-            changed = True
-            break
-        if not changed:
-            break
 
     return active, merged_count
 
@@ -349,9 +325,8 @@ def write_groups(
 
 def main() -> int:
     args = parse_args()
-    for name in ("max_small_tc", "max_tc_per_spec"):
-        if getattr(args, name) <= 0:
-            raise SystemExit(f"--{name.replace('_', '-')} must be positive")
+    if args.max_tc_per_spec <= 0:
+        raise SystemExit("--max-tc-per-spec must be positive")
     for name in ("max_ru", "max_du"):
         if getattr(args, name) < 0:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
@@ -373,7 +348,6 @@ def main() -> int:
         requirement_columns,
         cases,
         support,
-        args.max_small_tc,
         args.max_ru,
         args.max_du,
         args.max_tc_per_spec,

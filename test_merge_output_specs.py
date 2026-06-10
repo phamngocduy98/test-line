@@ -31,7 +31,7 @@ def make_support() -> RuBandSupport:
         lte_band_names={"b1": "b1", "b2": "b2"},
         nr_band_names={},
         lte_by_ru={
-            "rf-1": frozenset({"b1"}),
+            "rf-1": frozenset({"b1", "b2"}),
             "rf-2": frozenset({"b2"}),
         },
         nr_by_ru={"rf-1": frozenset(), "rf-2": frozenset()},
@@ -50,29 +50,43 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(ru_count(spec), 2)
         self.assertEqual(du_count(spec), 4)
 
-    def test_small_group_merges_into_strictly_larger_group(self) -> None:
+    def test_broader_target_absorbs_equal_size_source(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-1", enb="1", **{"lte band": "b1"}),
-            make_case(1, "B", ru="rf-1", enb="1", **{"lte band": "b1"}),
-            make_case(2, "C", ru="rf-1", enb="1", **{"lte band": "b1"}),
+            make_case(
+                1,
+                "B",
+                ru="rf-1 + rf-1",
+                enb="1",
+                **{"lte band": "b1 + b2"},
+            ),
         ]
         groups = [
             SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)}),
-            SpecGroup(1, [1, 2], {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)}),
+            SpecGroup(
+                1,
+                [1],
+                {
+                    "ru": ("rf-1", "rf-1"),
+                    "enb": ("1",),
+                    "lte band": ("b1", "b2"),
+                },
+            ),
         ]
         merged, count = merge_small_groups(
             groups,
             ["ru", "enb", "lte band"],
             cases,
             make_support(),
-            max_small_tc=1,
             max_ru=3,
             max_du=3,
             max_tc_per_spec=10,
         )
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
-        self.assertEqual(merged[0].assigned_indices, [0, 1, 2])
+        self.assertEqual(merged[0].assigned_indices, [0, 1])
+        self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1"))
+        self.assertEqual(merged[0].spec["lte band"], ("b1", "b2"))
 
     def test_ru_limit_rejects_merge(self) -> None:
         cases = [
@@ -89,7 +103,6 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "enb"],
             cases,
             make_support(),
-            max_small_tc=1,
             max_ru=1,
             max_du=3,
             max_tc_per_spec=10,
@@ -112,7 +125,27 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "enb"],
             cases,
             make_support(),
-            max_small_tc=1,
+            max_ru=3,
+            max_du=3,
+            max_tc_per_spec=10,
+        )
+        self.assertEqual(count, 0)
+        self.assertEqual(len(merged), 2)
+
+    def test_original_testcase_check_can_reject_source_spec_match(self) -> None:
+        cases = [
+            make_case(0, "A", ru="rf-1", enb="1", **{"lte band": "b2"}),
+            make_case(1, "B", ru="rf-1", enb="1", **{"lte band": "b1"}),
+        ]
+        groups = [
+            SpecGroup(0, [0], {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)}),
+            SpecGroup(1, [1], {"ru": ("rf-1",), "enb": ("1",), "lte band": ("b1",)}),
+        ]
+        merged, count = merge_small_groups(
+            groups,
+            ["ru", "enb", "lte band"],
+            cases,
+            make_support(),
             max_ru=3,
             max_du=3,
             max_tc_per_spec=10,
@@ -155,7 +188,6 @@ class MergeIoTests(unittest.TestCase):
             ["merge_output_specs.py", "--ru-band-support", "support.csv"],
         ):
             args = parse_args()
-        self.assertEqual(args.max_small_tc, 3)
         self.assertEqual(args.max_ru, 3)
         self.assertEqual(args.max_du, 3)
         self.assertEqual(args.max_tc_per_spec, 338)
@@ -196,7 +228,6 @@ class MergeIoTests(unittest.TestCase):
                     "--testcases", str(testcases),
                     "--ru-band-support", str(support),
                     "--output", str(output),
-                    "--max-small-tc", "1",
                 ],
             ):
                 self.assertEqual(main(), 0)
