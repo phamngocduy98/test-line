@@ -243,6 +243,28 @@ last completed stage if a later optimization stage reaches the timeout.
 Assigned testcase IDs are the final one-to-one assignment used for balancing.
 Covered testcase IDs show all testcases that the spec could cover.
 
+## Second-Pass Compaction
+
+`merge_output_specs.py` performs a separate greedy pass over solver output:
+
+```text
+python merge_output_specs.py \
+  --input output_specs.csv \
+  --testcases input.csv \
+  --ru-band-support ru_band_support.csv \
+  --output merged_output_specs.csv
+```
+
+The pass rebuilds merged specs from the original assigned testcase rows, then
+rechecks coverage and RU-band compatibility. By default, a spec with at most
+three assigned testcases may merge into a strictly larger spec. A resulting
+spec may contain at most three RU slots and total DU capacity of three across
+`enb`, `vdu`, `au`, and `cu`.
+
+Use `--max-small-tc`, `--max-ru`, `--max-du`, and `--max-tc-per-spec` to change
+these limits. The output uses the same columns as the first pass and marks
+`solve_status` as `SECOND_PASS`.
+
 ## Verification
 
 Before writing output, the solver validates:
