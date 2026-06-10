@@ -172,7 +172,10 @@ The optimization result is exact over this generated candidate pool, not over
 every theoretically possible merged spec.
 
 Candidate growth is controlled by `--max-candidates-per-bucket`. This keeps
-runtime and memory practical for large files.
+runtime and memory practical for large files. The cap applies across all merge
+strategies in a bucket. Exact rows contribute one deterministic compatible
+realization each; merged seeds may contribute a small number of compatibility
+variants until the bucket cap is reached.
 
 ## Optimization Engine
 
@@ -219,7 +222,9 @@ If it finds a feasible solution but cannot finish within the timeout, the output
 status is `FEASIBLE_TIMEOUT`.
 
 The output remains valid in both cases. With `FEASIBLE_TIMEOUT`, the result is
-the best feasible assignment found inside the generated candidate pool.
+the best feasible assignment found inside the generated candidate pool. The
+solver starts from a deterministic feasible assignment hint and retains the
+last completed stage if a later optimization stage reaches the timeout.
 
 ## Output Format
 

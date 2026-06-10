@@ -15,6 +15,7 @@ import re
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import product
 from pathlib import Path
 from typing import Iterable
@@ -125,10 +126,12 @@ def render_cell(tokens: Iterable[str]) -> str:
     return " + ".join(tokens)
 
 
+@lru_cache(maxsize=None)
 def is_any(token: str) -> bool:
     return ANY in {alternative.lower() for alternative in token.split("/")}
 
 
+@lru_cache(maxsize=None)
 def alternatives(token: str) -> frozenset[str]:
     return frozenset(part.lower() for part in token.split("/"))
 
@@ -739,6 +742,8 @@ def build_candidate_variants(
 
     candidates: list[Candidate] = []
     for spec in specs:
+        if support is not None and not spec_has_compatible_ru_bands(spec, support):
+            continue
         covered: list[int] = []
         deltas: list[int] = []
         for case in check_cases:
@@ -747,7 +752,6 @@ def build_candidate_variants(
                 spec,
                 case,
                 enforce_delta=enforce_delta,
-                support=support,
             )
             if ok:
                 covered.append(case.index)
@@ -762,7 +766,6 @@ def build_candidate_variants(
                 spec,
                 all_cases[index],
                 enforce_delta=enforce_delta,
-                support=support,
             )
             if not ok:
                 seed_is_covered = False
@@ -853,7 +856,7 @@ def generate_candidates(
             cases,
             max_cover_checks,
             support=support,
-            max_compatibility_variants=max_candidates_per_bucket,
+            max_compatibility_variants=1,
         )
         if support is not None and not exact_variants:
             raise SystemExit(
@@ -867,6 +870,27 @@ def generate_candidates(
         bucket_map[single_select_key(case)].append(case)
 
     for bucket_cases in bucket_map.values():
+        bucket_signatures: set[
+            tuple[tuple[str, tuple[str, ...]], ...]
+        ] = set()
+
+        def add_bucket_variants(indices: Iterable[int]) -> None:
+            remaining = max_candidates_per_bucket - len(bucket_signatures)
+            if remaining <= 0:
+                return
+            variants = build_candidate_variants(
+                requirement_columns,
+                cases,
+                indices,
+                cases,
+                max_cover_checks,
+                support=support,
+                max_compatibility_variants=min(4, remaining),
+            )
+            for candidate in variants:
+                bucket_signatures.add(candidate.signature)
+                add_candidate(candidates, candidate)
+
         sorted_bucket = sorted(
             bucket_cases,
             key=lambda case: (
@@ -875,35 +899,26 @@ def generate_candidates(
             ),
         )
         if len(sorted_bucket) > 1:
-            for candidate in build_candidate_variants(
-                    requirement_columns,
-                    cases,
-                    [case.index for case in sorted_bucket],
-                    cases,
-                    max_cover_checks,
-                    support=support,
-                    max_compatibility_variants=max_candidates_per_bucket,
-                ):
-                add_candidate(candidates, candidate)
+            add_bucket_variants(case.index for case in sorted_bucket)
 
         for window_size in (2, 3, 5, 8, 13, 21, 34, 55):
-            if window_size > len(sorted_bucket):
+            if (
+                window_size > len(sorted_bucket)
+                or len(bucket_signatures) >= max_candidates_per_bucket
+            ):
                 continue
             made = 0
             step = max(1, window_size // 2)
             for start in range(0, len(sorted_bucket) - window_size + 1, step):
-                for candidate in build_candidate_variants(
-                        requirement_columns,
-                        cases,
-                        [case.index for case in sorted_bucket[start : start + window_size]],
-                        cases,
-                        max_cover_checks,
-                        support=support,
-                        max_compatibility_variants=max_candidates_per_bucket,
-                    ):
-                    add_candidate(candidates, candidate)
+                add_bucket_variants(
+                    case.index
+                    for case in sorted_bucket[start : start + window_size]
+                )
                 made += 1
-                if made >= max_candidates_per_bucket:
+                if (
+                    made >= max_candidates_per_bucket
+                    or len(bucket_signatures) >= max_candidates_per_bucket
+                ):
                     break
 
         signature_groups: dict[tuple, list[TestCase]] = defaultdict(list)
@@ -916,17 +931,10 @@ def generate_candidates(
             key=lambda group: (-len(group), min(case.index for case in group)),
         )
         for group in ranked_groups[:max_candidates_per_bucket]:
+            if len(bucket_signatures) >= max_candidates_per_bucket:
+                break
             if len(group) > 1:
-                for candidate in build_candidate_variants(
-                        requirement_columns,
-                        cases,
-                        [case.index for case in group],
-                        cases,
-                        max_cover_checks,
-                        support=support,
-                        max_compatibility_variants=max_candidates_per_bucket,
-                    ):
-                    add_candidate(candidates, candidate)
+                add_bucket_variants(case.index for case in group)
 
     return sorted(
         candidates.values(),
@@ -994,6 +1002,28 @@ def solve_with_ortools(
         model.Add(assigned_count <= max_tc_per_spec * selected[j])
         assigned_count_vars.append(assigned_count)
 
+    hinted_assignments: dict[int, int] = {}
+    hinted_counts: Counter[int] = Counter()
+    for case in cases:
+        candidate_index = next(
+            (
+                j
+                for j in coverers[case.index]
+                if hinted_counts[j] < max_tc_per_spec
+            ),
+            None,
+        )
+        if candidate_index is None:
+            raise SystemExit(f"no capacity-feasible candidate covers testcase {case.tc_id}")
+        hinted_assignments[case.index] = candidate_index
+        hinted_counts[candidate_index] += 1
+
+    hinted_selected = set(hinted_assignments.values())
+    for j, var in enumerate(selected):
+        model.AddHint(var, int(j in hinted_selected))
+    for key, var in assignments.items():
+        model.AddHint(var, int(hinted_assignments[key[0]] == key[1]))
+
     max_equipment = model.NewIntVar(0, max(c.equipment_count for c in candidates), "max_equipment")
     for j, candidate in enumerate(candidates):
         model.Add(max_equipment >= candidate.equipment_count * selected[j])
@@ -1025,26 +1055,37 @@ def solve_with_ortools(
     )
     solve_status = "OPTIMAL"
     status = None
+    best_selected_indices: list[int] | None = None
+    best_assignment_by_case: dict[int, int] | None = None
     for objective in objectives:
         remaining = max(0.1, timeout_seconds - (time.monotonic() - started_at))
         solver.parameters.max_time_in_seconds = remaining
         model.Minimize(objective)
         status = solver.Solve(model)
+        if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            best_selected_indices = [
+                j for j, var in enumerate(selected) if solver.BooleanValue(var)
+            ]
+            best_assignment_by_case = {
+                case_index: candidate_index
+                for (case_index, candidate_index), var in assignments.items()
+                if solver.BooleanValue(var)
+            }
         if status == cp_model.OPTIMAL:
             model.Add(objective == int(solver.ObjectiveValue()))
             continue
         if status == cp_model.FEASIBLE:
             solve_status = "FEASIBLE_TIMEOUT"
             break
+        if status == cp_model.UNKNOWN and best_assignment_by_case is not None:
+            solve_status = "FEASIBLE_TIMEOUT"
+            break
         raise SystemExit("no feasible solution found")
 
-    selected_indices = [j for j, var in enumerate(selected) if solver.BooleanValue(var)]
-    assignment_by_case: dict[int, int] = {}
-    for (case_index, candidate_index), var in assignments.items():
-        if solver.BooleanValue(var):
-            assignment_by_case[case_index] = candidate_index
+    if best_selected_indices is None or best_assignment_by_case is None:
+        raise SystemExit("no feasible solution found")
 
-    return solve_status, selected_indices, assignment_by_case
+    return solve_status, best_selected_indices, best_assignment_by_case
 
 
 def validate_solution(

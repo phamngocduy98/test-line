@@ -585,6 +585,30 @@ class CandidateTests(unittest.TestCase):
                 ["lte band", "ru"], cases, 10, 0, support=make_support()
             )
 
+    def test_exact_wildcard_row_adds_one_compatibility_variant(self) -> None:
+        cases = [make_case(0, "A", ru="any", **{"lte band": "any"})]
+        candidates = generate_candidates(
+            ["lte band", "ru"], cases, 10, 0, support=make_support()
+        )
+        self.assertEqual(len(candidates), 1)
+
+    def test_merge_candidates_respect_bucket_cap(self) -> None:
+        cases = [
+            make_case(index, str(index), ru=value)
+            for index, value in enumerate(("a", "b", "c", "d", "e", "f"))
+        ]
+        candidates = generate_candidates(["ru"], cases, 2, 0)
+        exact_signatures = {
+            spec_signature({"ru": (value,)})
+            for value in ("a", "b", "c", "d", "e", "f")
+        }
+        merged = [
+            candidate
+            for candidate in candidates
+            if candidate.signature not in exact_signatures
+        ]
+        self.assertLessEqual(len(merged), 2)
+
     def test_expand_candidates_for_capacity(self) -> None:
         candidate = make_candidate({"ru": ("a",)}, (0, 1, 2, 3, 4), (0, 0, 0, 0, 0))
         self.assertEqual(len(expand_candidates_for_capacity([candidate], 2)), 3)
