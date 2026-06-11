@@ -198,12 +198,17 @@ Every testcase must be covered by at least one selected spec.
 
 The objective is lexicographic and solved in stages:
 
-1. Minimize maximum equipment count in any selected spec.
-2. Minimize total equipment count across selected specs.
-3. Minimize selected spec count.
+1. Minimize selected spec count.
+2. Minimize maximum equipment count in any selected spec.
+3. Minimize total equipment count across selected specs.
 
 The implementation uses staged solves instead of one huge weighted objective to
 avoid integer overflow and weight-tuning problems on large candidate pools.
+
+Phase 1 does not impose explicit RU, DU, or UE equipment caps. Its feasibility
+limits are the candidate-generation coverage and per-column delta rules. The
+`--max-ru`, `--max-du`, and `--max-ue` limits belong only to the optional
+second-pass compaction script.
 
 ## Timeout Behavior
 
@@ -214,9 +219,9 @@ If it finds a feasible solution but cannot finish within the timeout, the output
 status is `FEASIBLE_TIMEOUT`.
 
 The output remains valid in both cases. With `FEASIBLE_TIMEOUT`, the result is
-the best feasible assignment found inside the generated candidate pool. The
-solver starts from a deterministic feasible assignment hint and retains the
-last completed stage if a later optimization stage reaches the timeout.
+the best feasible selection found inside the generated candidate pool. The
+solver starts from a deterministic greedy set-cover hint and retains the last
+completed stage if a later optimization stage reaches the timeout.
 
 ## Output Format
 

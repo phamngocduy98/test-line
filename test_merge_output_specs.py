@@ -92,7 +92,7 @@ class MergeHelpersTests(unittest.TestCase):
         )
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
-        self.assertEqual(merged[0].assigned_indices, [0, 1])
+        self.assertEqual(merged[0].covered_indices, [0, 1])
         self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1"))
         self.assertEqual(merged[0].spec["lte band"], ("b1", "b2"))
 
@@ -122,7 +122,7 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0].original_order, 0)
-        self.assertEqual(merged[0].assigned_indices, [0, 1])
+        self.assertEqual(merged[0].covered_indices, [0, 1])
         self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1"))
 
     def test_equivalent_specs_keep_earlier_input_spec(self) -> None:
@@ -147,7 +147,7 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0].original_order, 0)
-        self.assertEqual(merged[0].assigned_indices, [0, 1])
+        self.assertEqual(merged[0].covered_indices, [0, 1])
 
     def test_bubble_merge_restarts_after_each_merge(self) -> None:
         cases = [
@@ -181,7 +181,7 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 2)
         self.assertEqual(len(merged), 1)
         self.assertEqual(merged[0].original_order, 0)
-        self.assertEqual(merged[0].assigned_indices, [0, 1, 2])
+        self.assertEqual(merged[0].covered_indices, [0, 1, 2])
         self.assertEqual(merged[0].spec["ru"], ("rf-1", "rf-1", "rf-1"))
 
     def test_ru_limit_rejects_merge(self) -> None:
@@ -512,7 +512,7 @@ class MergeHelpersTests(unittest.TestCase):
             log,
         )
 
-    def test_merge_rejects_candidate_that_loses_assigned_any_coverage(self) -> None:
+    def test_merge_rejects_candidate_that_loses_covered_any_coverage(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-2"),
             make_case(1, "B", ru="rf-1"),
@@ -522,7 +522,7 @@ class MergeHelpersTests(unittest.TestCase):
             SpecGroup(1, [1], {"ru": ("rf-1",)}),
         ]
         original_specs = [dict(group.spec) for group in groups]
-        original_assignments = [list(group.assigned_indices) for group in groups]
+        original_coverages = [list(group.covered_indices) for group in groups]
         output = io.StringIO()
 
         with patch("sys.stdout", output):
@@ -540,12 +540,12 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(len(merged), 2)
         self.assertEqual([group.spec for group in groups], original_specs)
         self.assertEqual(
-            [group.assigned_indices for group in groups],
-            original_assignments,
+            [group.covered_indices for group in groups],
+            original_coverages,
         )
         self.assertIn(
             "FAIL left=spec_1 right=spec_2 "
-            "condition=assigned_testcase_coverage tc_id=A column='ru' "
+            "condition=covered_testcase_coverage tc_id=A column='ru' "
             "candidate='rf-1' requirement='rf-2'",
             output.getvalue(),
         )
@@ -575,12 +575,12 @@ class MergeHelpersTests(unittest.TestCase):
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
         self.assertIn(
-            "NEW_SPEC target=spec_1 assigned_tc_ids=A + B "
+            "NEW_SPEC target=spec_1 covered_tc_ids=A + B "
             "ru='rf-1' enb='2'",
             output.getvalue(),
         )
 
-    def test_final_validation_reports_unsatisfied_assigned_case(self) -> None:
+    def test_final_validation_reports_unsatisfied_covered_case(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-1", enb="1", **{"lte band": "b2"}),
             make_case(1, "B", ru="rf-1", enb="1", **{"lte band": "b1"}),
@@ -602,27 +602,23 @@ class MergeHelpersTests(unittest.TestCase):
 
 
 class MergeIoTests(unittest.TestCase):
-    def test_load_groups_requires_complete_unique_assignments(self) -> None:
+    def test_load_groups_requires_complete_coverage(self) -> None:
         cases = [make_case(0, "A", ru="rf-1"), make_case(1, "B", ru="rf-1")]
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "output.csv"
             with path.open("w", newline="", encoding="utf-8") as handle:
                 writer = csv.DictWriter(
                     handle, fieldnames=[
-                        "spec_id", "assigned_tc_ids", "assigned_count",
-                        "covered_tc_ids", "covered_count", "equipment_count",
-                        "total_delta", "solve_status", "ru",
+                        "spec_id", "covered_tc_ids", "covered_count",
+                        "equipment_count", "solve_status", "ru",
                     ]
                 )
                 writer.writeheader()
                 writer.writerow({
                     "spec_id": "spec_1",
-                    "assigned_tc_ids": "A",
-                    "assigned_count": "1",
                     "covered_tc_ids": "A",
                     "covered_count": "1",
                     "equipment_count": "1",
-                    "total_delta": "0",
                     "solve_status": "OPTIMAL",
                     "ru": "rf-1",
                 })
@@ -687,11 +683,10 @@ class MergeIoTests(unittest.TestCase):
                 encoding="utf-8",
             )
             first_pass.write_text(
-                "spec_id,assigned_tc_ids,assigned_count,covered_tc_ids,"
-                "covered_count,equipment_count,total_delta,solve_status,"
+                "spec_id,covered_tc_ids,covered_count,equipment_count,solve_status,"
                 "enb,lte band,ru\n"
-                "spec_1,A,1,A,1,2,0,OPTIMAL,1,b1,rf-1\n"
-                "spec_2,B + C,2,B + C,2,2,0,OPTIMAL,1,b1,rf-1\n",
+                "spec_1,A,1,2,OPTIMAL,1,b1,rf-1\n"
+                "spec_2,B + C,2,2,OPTIMAL,1,b1,rf-1\n",
                 encoding="utf-8",
             )
 
@@ -710,7 +705,7 @@ class MergeIoTests(unittest.TestCase):
             with output.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["assigned_tc_ids"], "A + B + C")
+            self.assertEqual(rows[0]["covered_tc_ids"], "A + B + C")
             self.assertEqual(rows[0]["solve_status"], "SECOND_PASS")
 
 

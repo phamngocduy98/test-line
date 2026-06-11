@@ -1,7 +1,0 @@
-tc_id,tech lte,tech nsa,tech nr sa,enb,vdu,au,cu,lte band,nr band,ru,cc location,ca type,rf condition,ue capa lte,ue capa nr,ue capa special
-1,1,1,0,2,0,0,0,b1 + b2,,rf-1234 + rf-1111,intra cc,inter DU,mobility,any,,s22
-2,1,1,1,1,1,0,0,b1 + b1,n1,rf-1234,any,intra DU,,volte,any,
-3,1,0,0,1,0,0,0,any,any,any,any,non ca,peak 4 path,any + any,,
-4,1,0,0,1,0,0,0,any + intra,,any + any,any,intra DU,,any,,
-5,1,0,0,1,0,0,0,any + inter,,any + any,inter cc,intra DU,,any,,
-6,1,1,,1,1,,,any,any,any,any,non ca,,nsa,nsa,

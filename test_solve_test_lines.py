@@ -20,8 +20,8 @@ from solve_test_lines import (
     coverage_delta,
     covers_column,
     equipment_count,
-    expand_candidates_for_capacity,
     generate_candidates,
+    greedy_set_cover_hint,
     is_any,
     is_temporarily_ignored_column,
     load_cases,
@@ -39,6 +39,7 @@ from solve_test_lines import (
     solve_with_ortools,
     spec_signature,
     spec_has_compatible_ru_bands,
+    sliding_window_starts,
     split_band_tokens,
     main,
     validate_solution,
@@ -55,13 +56,11 @@ def make_case(index: int, tc_id: str, **values: str) -> SolverTestCase:
 def make_candidate(
     spec: dict[str, tuple[str, ...]],
     covered: tuple[int, ...],
-    deltas: tuple[int, ...],
     count: int = 0,
 ) -> Candidate:
     return Candidate(
         spec=spec,
         covered=covered,
-        deltas=deltas,
         equipment_count=count,
         signature=spec_signature(spec),
     )
@@ -545,14 +544,13 @@ class CandidateTests(unittest.TestCase):
         add_candidate(candidates, None)
         self.assertEqual(candidates, {})
 
-    def test_add_candidate_unions_coverage_and_keeps_lowest_delta(self) -> None:
+    def test_add_candidate_unions_coverage(self) -> None:
         spec = {"ru": ("a",)}
         candidates = {}
-        add_candidate(candidates, make_candidate(spec, (0,), (2,)))
-        add_candidate(candidates, make_candidate(spec, (0, 1), (1, 0)))
+        add_candidate(candidates, make_candidate(spec, (0,)))
+        add_candidate(candidates, make_candidate(spec, (0, 1)))
         merged = candidates[spec_signature(spec)]
         self.assertEqual(merged.covered, (0, 1))
-        self.assertEqual(merged.deltas, (1, 0))
 
     def test_generate_candidates_includes_exact_rows(self) -> None:
         cases = [make_case(0, "A", ru="a"), make_case(1, "B", ru="b")]
@@ -609,87 +607,95 @@ class CandidateTests(unittest.TestCase):
         ]
         self.assertLessEqual(len(merged), 2)
 
-    def test_expand_candidates_for_capacity(self) -> None:
-        candidate = make_candidate({"ru": ("a",)}, (0, 1, 2, 3, 4), (0, 0, 0, 0, 0))
-        self.assertEqual(len(expand_candidates_for_capacity([candidate], 2)), 3)
+    def test_sliding_windows_use_quarter_width_stride(self) -> None:
+        self.assertEqual(list(sliding_window_starts(12, 8)), [0, 2, 4])
+        self.assertEqual(list(sliding_window_starts(50, 34)), [0, 8, 16])
+
+    def test_greedy_hint_prefers_coverage_then_equipment_then_order(self) -> None:
+        cases = [make_case(index, str(index), ru="a") for index in range(4)]
+        candidates = [
+            make_candidate({"ru": ("large",)}, (0, 1, 2), count=4),
+            make_candidate({"ru": ("small",)}, (0, 1, 2), count=3),
+            make_candidate({"ru": ("last",)}, (3,), count=1),
+            make_candidate({"ru": ("same",)}, (3,), count=1),
+        ]
+        self.assertEqual(greedy_set_cover_hint(candidates, cases), {1, 2})
 
 
 class SolverAndValidationTests(unittest.TestCase):
-    def test_solver_selects_and_assigns_all_cases(self) -> None:
+    def test_solver_selects_specs_covering_all_cases(self) -> None:
         cases = [make_case(0, "A", ru="a"), make_case(1, "B", ru="b")]
-        candidates = expand_candidates_for_capacity(
-            generate_candidates(["ru"], cases, 10, 0), 10
-        )
-        status, selected, assignments = solve_with_ortools(candidates, cases, 10, 10)
+        candidates = generate_candidates(["ru"], cases, 10, 0)
+        status, selected = solve_with_ortools(candidates, cases, 10)
         self.assertEqual(status, "OPTIMAL")
-        self.assertEqual(set(assignments), {0, 1})
-        validate_solution(["ru"], cases, candidates, selected, assignments, 10)
+        validate_solution(["ru"], cases, candidates, selected)
+
+    def test_solver_prioritizes_one_larger_spec_over_two_smaller_specs(self) -> None:
+        cases = [make_case(0, "A"), make_case(1, "B")]
+        candidates = [
+            make_candidate({"ru": ("a",)}, (0,), count=2),
+            make_candidate({"ru": ("b",)}, (1,), count=2),
+            make_candidate({"ru": ("a", "b")}, (0, 1), count=3),
+        ]
+        status, selected = solve_with_ortools(candidates, cases, 10)
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(selected, [2])
+
+    def test_solver_breaks_spec_count_ties_by_max_then_total_equipment(self) -> None:
+        cases = [make_case(0, "A"), make_case(1, "B")]
+        candidates = [
+            make_candidate({"ru": ("a-large",)}, (0,), count=4),
+            make_candidate({"ru": ("a-small",)}, (0,), count=3),
+            make_candidate({"ru": ("b-large",)}, (1,), count=3),
+            make_candidate({"ru": ("b-small",)}, (1,), count=2),
+        ]
+        status, selected = solve_with_ortools(candidates, cases, 10)
+        self.assertEqual(status, "OPTIMAL")
+        self.assertEqual(selected, [1, 3])
 
     def test_solver_rejects_uncovered_case(self) -> None:
         cases = [make_case(0, "A", ru="a")]
-        candidates = [make_candidate({"ru": ("b",)}, (), ())]
+        candidates = [make_candidate({"ru": ("b",)}, ())]
         with self.assertRaisesRegex(SystemExit, "no candidate covers"):
-            solve_with_ortools(candidates, cases, 1, 1)
+            solve_with_ortools(candidates, cases, 1)
 
-    def test_validate_requires_every_case_assignment(self) -> None:
+    def test_validate_requires_every_case_coverage(self) -> None:
         cases = [make_case(0, "A", ru="a")]
-        with self.assertRaisesRegex(SystemExit, "every testcase"):
-            validate_solution(["ru"], cases, [], [], {}, 1)
-
-    def test_validate_requires_selected_and_assigned_sets_to_match(self) -> None:
-        cases = [make_case(0, "A", ru="a")]
-        candidate = make_candidate({"ru": ("a",)}, (0,), (0,))
-        with self.assertRaisesRegex(SystemExit, "selected specs"):
-            validate_solution(["ru"], cases, [candidate], [], {0: 0}, 1)
-
-    def test_validate_enforces_testcase_limit(self) -> None:
-        cases = [make_case(0, "A", ru="a"), make_case(1, "B", ru="a")]
-        candidate = make_candidate({"ru": ("a",)}, (0, 1), (0, 0))
-        with self.assertRaisesRegex(SystemExit, "testcase limit"):
-            validate_solution(["ru"], cases, [candidate], [0], {0: 0, 1: 0}, 1)
-
-    def test_validate_rejects_uncovered_assignment(self) -> None:
-        cases = [make_case(0, "A", ru="a")]
-        candidate = make_candidate({"ru": ("b",)}, (0,), (0,))
-        with self.assertRaisesRegex(SystemExit, "not covered"):
-            validate_solution(["ru"], cases, [candidate], [0], {0: 0}, 1)
+        with self.assertRaisesRegex(SystemExit, "uncovered testcases"):
+            validate_solution(["ru"], cases, [], [])
 
     def test_validate_rejects_multiple_single_select_values(self) -> None:
         cases = [make_case(0, "A", **{"cc location": "any"})]
         spec = {"cc location": parse_cell("intra cc + inter cc")}
-        candidate = make_candidate(spec, (0,), (0,))
+        candidate = make_candidate(spec, (0,))
         with patch("solve_test_lines.coverage_delta", return_value=(True, 0)):
             with self.assertRaisesRegex(SystemExit, "multiple concrete values"):
-                validate_solution(
-                    ["cc location"], cases, [candidate], [0], {0: 0}, 1
-                )
+                validate_solution(["cc location"], cases, [candidate], [0])
 
     def test_validate_rejects_wrong_equipment_count(self) -> None:
         cases = [make_case(0, "A", ru="a")]
-        candidate = make_candidate({"ru": ("a",)}, (0,), (0,), count=99)
+        candidate = make_candidate({"ru": ("a",)}, (0,), count=99)
         with self.assertRaisesRegex(SystemExit, "equipment count mismatch"):
-            validate_solution(["ru"], cases, [candidate], [0], {0: 0}, 1)
+            validate_solution(["ru"], cases, [candidate], [0])
 
     def test_validate_can_disable_delta_limit(self) -> None:
         cases = [make_case(0, "A", ru="a")]
         spec = {"ru": parse_cell("a + b + c")}
-        candidate = make_candidate(spec, (0,), (2,), count=3)
+        candidate = make_candidate(spec, (0,), count=3)
         validate_solution(
-            ["ru"], cases, [candidate], [0], {0: 0}, 1, enforce_delta=False
+            ["ru"], cases, [candidate], [0], enforce_delta=False
         )
 
     def test_validate_rejects_incompatible_ru_band_spec(self) -> None:
         cases = [make_case(0, "A", ru="rf-1", **{"lte band": "b3"})]
         spec = {"ru": ("rf-1",), "lte band": ("b3",)}
-        candidate = make_candidate(spec, (0,), (0,), count=1)
+        candidate = make_candidate(spec, (0,), count=1)
         with self.assertRaisesRegex(SystemExit, "not covered"):
             validate_solution(
                 ["lte band", "ru"],
                 cases,
                 [candidate],
                 [0],
-                {0: 0},
-                1,
                 support=make_support(),
             )
 
@@ -704,7 +710,7 @@ class OutputTests(unittest.TestCase):
                 tokens={"ru": ("a",), "tech lte": ("1",)},
             )
         ]
-        candidate = make_candidate({"ru": ("a",)}, (0,), (0,), count=1)
+        candidate = make_candidate({"ru": ("a",)}, (0,), count=1)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "output.csv"
             metrics = write_output(
@@ -714,13 +720,12 @@ class OutputTests(unittest.TestCase):
                 cases,
                 [candidate],
                 [0],
-                {0: 0},
                 "OPTIMAL",
             )
             with path.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
-        self.assertEqual(metrics, (1, 1, 1, 0, [1]))
-        self.assertEqual(rows[0]["assigned_tc_ids"], "A")
+        self.assertEqual(metrics, (1, 1, 1))
+        self.assertEqual(rows[0]["covered_tc_ids"], "A")
         self.assertEqual(rows[0]["ru"], "a")
         self.assertEqual(rows[0]["tech lte"], "")
 
@@ -736,7 +741,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.output, "output_specs.csv")
         self.assertEqual(args.ru_band_support, "support.csv")
         self.assertEqual(args.timeout, 600.0)
-        self.assertEqual(args.max_tc_per_spec, 338)
         self.assertFalse(args.ignore_tech_and_ue_capa)
 
     def test_parse_args_accepts_all_options(self) -> None:
@@ -755,8 +759,6 @@ class CliTests(unittest.TestCase):
             "--max-cover-checks-per-candidate",
             "7",
             "--ignore-tech-and-ue-capa",
-            "--max-tc-per-spec",
-            "9",
         ]
         with patch("sys.argv", argv):
             args = parse_args()
@@ -767,21 +769,6 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.max_candidates_per_bucket, 5)
         self.assertEqual(args.max_cover_checks_per_candidate, 7)
         self.assertTrue(args.ignore_tech_and_ue_capa)
-        self.assertEqual(args.max_tc_per_spec, 9)
-
-    def test_main_rejects_non_positive_testcase_limit(self) -> None:
-        with patch(
-            "sys.argv",
-            [
-                "solve_test_lines.py",
-                "--ru-band-support",
-                "support.csv",
-                "--max-tc-per-spec",
-                "0",
-            ],
-        ):
-            with self.assertRaisesRegex(SystemExit, "must be positive"):
-                main()
 
     def test_main_rejects_empty_candidate_pool(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

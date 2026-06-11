@@ -821,6 +821,11 @@ def add_candidate(
     )
 
 
+def sliding_window_starts(bucket_size: int, window_size: int) -> range:
+    step = max(1, window_size // 4)
+    return range(0, bucket_size - window_size + 1, step)
+
+
 def generate_candidates(
     requirement_columns: list[str],
     cases: list[TestCase],
@@ -890,8 +895,7 @@ def generate_candidates(
             ):
                 continue
             made = 0
-            step = max(1, window_size // 2)
-            for start in range(0, len(sorted_bucket) - window_size + 1, step):
+            for start in sliding_window_starts(len(sorted_bucket), window_size):
                 add_bucket_variants(
                     case.index
                     for case in sorted_bucket[start : start + window_size]
@@ -928,7 +932,34 @@ def generate_candidates(
     )
 
 
+def greedy_set_cover_hint(
+    candidates: list[Candidate],
+    cases: list[TestCase],
+) -> set[int]:
+    uncovered = {case.index for case in cases}
+    hinted_selected: set[int] = set()
 
+    while uncovered:
+        best_index = min(
+            range(len(candidates)),
+            key=lambda index: (
+                -len(uncovered.intersection(candidates[index].covered)),
+                candidates[index].equipment_count,
+                index,
+            ),
+        )
+        newly_covered = uncovered.intersection(candidates[best_index].covered)
+        if not newly_covered:
+            missing_ids = [
+                case.tc_id for case in cases if case.index in uncovered
+            ]
+            raise SystemExit(
+                "no candidate covers testcases: " + ", ".join(missing_ids)
+            )
+        hinted_selected.add(best_index)
+        uncovered.difference_update(newly_covered)
+
+    return hinted_selected
 
 
 def solve_with_ortools(
@@ -956,16 +987,7 @@ def solve_with_ortools(
             raise SystemExit(f"no candidate covers testcase {case.tc_id}")
         model.Add(sum(selected[j] for j in coverers[case.index]) >= 1)
 
-    hinted_selected = set()
-    for case in cases:
-        candidate_index = next(
-            (j for j in coverers[case.index]),
-            None,
-        )
-        if candidate_index is None:
-            raise SystemExit(f"no candidate covers testcase {case.tc_id}")
-        hinted_selected.add(candidate_index)
-
+    hinted_selected = greedy_set_cover_hint(candidates, cases)
     for j, var in enumerate(selected):
         model.AddHint(var, int(j in hinted_selected))
 
@@ -981,9 +1003,9 @@ def solve_with_ortools(
     started_at = time.monotonic()
 
     objectives = (
+        selected_count,
         max_equipment,
         total_equipment,
-        selected_count,
     )
     solve_status = "OPTIMAL"
     status = None
