@@ -15,6 +15,7 @@ from solve_test_lines import (
     UE_COLUMN,
     TestCase,
     alternatives,
+    assign_cases_equally,
     coverage_delta,
     covers_column,
     equipment_count,
@@ -30,13 +31,15 @@ from solve_test_lines import (
 )
 
 
-METADATA_COLUMNS = [
+REQUIRED_METADATA_COLUMNS = [
     "spec_id",
     "covered_tc_ids",
     "covered_count",
     "equipment_count",
     "solve_status",
 ]
+OPTIONAL_METADATA_COLUMNS = ["assigned_tc_ids", "assigned_count"]
+METADATA_COLUMNS = REQUIRED_METADATA_COLUMNS + OPTIONAL_METADATA_COLUMNS
 
 
 @dataclass
@@ -76,12 +79,13 @@ def parse_args() -> argparse.Namespace:
         default=3,
         help="Maximum RU slots in a resulting target spec. Default: 3.",
     )
-    parser.add_argument(
-        "--max-du",
-        type=int,
-        default=3,
-        help="Maximum total enb+vdu+au+cu capacity in a resulting target spec. Default: 3.",
-    )
+    for column in DU_COLUMNS:
+        parser.add_argument(
+            f"--max-{column}",
+            type=int,
+            default=2,
+            help=f"Maximum {column} capacity in a resulting spec. Default: 2.",
+        )
     parser.add_argument(
         "--max-ue",
         type=int,
@@ -93,6 +97,11 @@ def parse_args() -> argparse.Namespace:
         "--verbose",
         action="store_true",
         help="Log every merge attempt and the first failed condition.",
+    )
+    parser.add_argument(
+        "--auto-assign",
+        action="store_true",
+        help="Assign testcases as evenly as possible across merged specs.",
     )
     return parser.parse_args()
 
@@ -109,6 +118,13 @@ def du_count(spec: dict[str, tuple[str, ...]]) -> int:
     return sum(numeric_equipment(spec.get(column, ())) for column in DU_COLUMNS)
 
 
+def du_counts(spec: dict[str, tuple[str, ...]]) -> dict[str, int]:
+    return {
+        column: numeric_equipment(spec.get(column, ()))
+        for column in DU_COLUMNS
+    }
+
+
 def ue_count(spec: dict[str, tuple[str, ...]]) -> int:
     return numeric_equipment(spec.get(UE_COLUMN, ()))
 
@@ -121,7 +137,7 @@ def load_groups(
         reader = csv.DictReader(handle)
         if not reader.fieldnames:
             raise SystemExit(f"{path} has no header row")
-        missing = set(METADATA_COLUMNS) - set(reader.fieldnames)
+        missing = set(REQUIRED_METADATA_COLUMNS) - set(reader.fieldnames)
         if missing:
             raise SystemExit(
                 f"{path} is missing solver output columns: {', '.join(sorted(missing))}"
@@ -229,7 +245,10 @@ def merge_attempt(
     requirement_columns: list[str],
     support,
     max_ru: int,
-    max_du: int,
+    max_enb: int,
+    max_vdu: int,
+    max_au: int,
+    max_cu: int,
     max_ue: int,
 ) -> tuple[dict[str, tuple[str, ...]] | None, str]:
     candidate: dict[str, tuple[str, ...]] = {}
@@ -239,9 +258,18 @@ def merge_attempt(
             return None, f"merge_conflict column={column!r}"
         candidate[column] = merged
 
-    candidate_du = du_count(candidate)
-    if candidate_du > max_du:
-        return None, f"max_du actual={candidate_du} limit={max_du}"
+    limits = {
+        "enb": max_enb,
+        "vdu": max_vdu,
+        "au": max_au,
+        "cu": max_cu,
+    }
+    for column, actual in du_counts(candidate).items():
+        if actual > limits[column]:
+            return (
+                None,
+                f"max_{column} actual={actual} limit={limits[column]}",
+            )
 
     candidate_ru = ru_count(candidate)
     if candidate_ru > max_ru:
@@ -314,7 +342,10 @@ def merge_small_groups(
     cases: list[TestCase],
     support,
     max_ru: int,
-    max_du: int,
+    max_enb: int,
+    max_vdu: int,
+    max_au: int,
+    max_cu: int,
     max_ue: int = 10,
     verbose: bool = False,
 ) -> tuple[list[SpecGroup], int]:
@@ -336,7 +367,10 @@ def merge_small_groups(
                     requirement_columns,
                     support,
                     max_ru,
-                    max_du,
+                    max_enb,
+                    max_vdu,
+                    max_au,
+                    max_cu,
                     max_ue,
                 )
                 if candidate is None:
@@ -424,7 +458,14 @@ def write_groups(
     groups: list[SpecGroup],
     cases: list[TestCase],
     support,
+    auto_assign: bool = False,
 ) -> None:
+    fieldnames = [
+        column for column in fieldnames
+        if column not in OPTIONAL_METADATA_COLUMNS
+    ]
+    if auto_assign:
+        fieldnames[1:1] = OPTIONAL_METADATA_COLUMNS
     output_requirement_columns = [
         column for column in fieldnames if column not in METADATA_COLUMNS
     ]
@@ -437,22 +478,32 @@ def write_groups(
         ),
     )
 
+    coverage_by_group: list[list[int]] = []
+    for group in sorted_groups:
+        covered: list[int] = []
+        for case in cases:
+            ok, _ = coverage_delta(
+                requirement_columns,
+                group.spec,
+                case,
+                enforce_delta=False,
+                support=support,
+            )
+            if ok:
+                covered.append(case.index)
+        coverage_by_group.append(covered)
+
+    assigned_by_group: dict[int, list[int]] = {}
+    if auto_assign:
+        assigned_by_group = assign_cases_equally(coverage_by_group, cases)
+
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
-        for number, group in enumerate(sorted_groups, start=1):
-            covered: list[int] = []
-            for case in cases:
-                ok, _ = coverage_delta(
-                    requirement_columns,
-                    group.spec,
-                    case,
-                    enforce_delta=False,
-                    support=support,
-                )
-                if ok:
-                    covered.append(case.index)
-
+        for number, (group, covered) in enumerate(
+            zip(sorted_groups, coverage_by_group),
+            start=1,
+        ):
             row = {
                 "spec_id": f"spec_{number}",
                 "covered_tc_ids": " + ".join(cases[index].tc_id for index in covered),
@@ -462,6 +513,12 @@ def write_groups(
                 ),
                 "solve_status": "SECOND_PASS",
             }
+            if auto_assign:
+                assigned = assigned_by_group[number - 1]
+                row["assigned_tc_ids"] = " + ".join(
+                    cases[index].tc_id for index in assigned
+                )
+                row["assigned_count"] = len(assigned)
             for column in output_requirement_columns:
                 row[column] = (
                     render_cell(group.spec[column])
@@ -473,7 +530,7 @@ def write_groups(
 
 def main() -> int:
     args = parse_args()
-    for name in ("max_ru", "max_du", "max_ue"):
+    for name in ("max_ru", "max_enb", "max_vdu", "max_au", "max_cu", "max_ue"):
         if getattr(args, name) < 0:
             raise SystemExit(f"--{name.replace('_', '-')} must be non-negative")
 
@@ -495,7 +552,10 @@ def main() -> int:
         cases,
         support,
         args.max_ru,
-        args.max_du,
+        args.max_enb,
+        args.max_vdu,
+        args.max_au,
+        args.max_cu,
         args.max_ue,
         verbose=args.verbose,
     )
@@ -523,6 +583,7 @@ def main() -> int:
         merged_groups,
         cases,
         support,
+        auto_assign=args.auto_assign,
     )
 
     print(f"runtime_seconds={time.monotonic() - started_at:.2f}")

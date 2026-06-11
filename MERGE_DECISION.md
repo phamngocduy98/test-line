@@ -49,8 +49,8 @@ candidate, and the later group's coverages are transferred into it.
 The resulting candidate must satisfy:
 
 - RU slot count at most `--max-ru`, default `3`;
-- total DU capacity across `enb`, `vdu`, `au`, and `cu` at most `--max-du`,
-  default `3`;
+- each DU column is limited independently by `--max-enb`, `--max-vdu`,
+  `--max-au`, and `--max-cu`, each defaulting to `2`;
 - UE capacity at most `--max-ue`, default `10`.
 
 An absent `ue` column counts as zero.
@@ -110,6 +110,7 @@ Example:
 
 ```text
 FAIL left=spec_1 right=spec_2 condition=max_ru actual=4 limit=3
+FAIL left=spec_1 right=spec_2 condition=max_enb actual=3 limit=2
 FAIL left=spec_1 right=spec_2 condition=max_ue actual=12 limit=10
 FAIL left=spec_1 right=spec_2 condition=covered_testcase_coverage tc_id=A column='ru' candidate='rf-1' requirement='rf-2'
 NEW_SPEC target=spec_1 covered_tc_ids=A + B ru='rf-1' enb='1'
@@ -122,7 +123,7 @@ The pass stops with an error when:
 - required input columns are missing;
 - a testcase ID is unknown or uncovered;
 - solver output contains requirement columns absent from testcase input;
-- `--max-ru`, `--max-du`, or `--max-ue` is negative;
+- any RU, ENB, VDU, AU, CU, or UE maximum is negative;
 - final merged coverages do not satisfy their testcase requirements.
 
 Merge incompatibility is not an execution error. The two specs remain separate.
@@ -135,7 +136,7 @@ using stable deterministic keys.
 
 ## Output Metadata
 
-The output preserves first-pass columns:
+The output preserves first-pass requirement columns and core metadata:
 
 - `spec_id`
 - `covered_tc_ids`
@@ -143,6 +144,11 @@ The output preserves first-pass columns:
 - `equipment_count`
 - `solve_status`
 - all requirement columns
+
+With `--auto-assign`, the merge pass recalculates a balanced one-to-one
+testcase assignment after all merges and adds `assigned_tc_ids` and
+`assigned_count`. Assignment is limited to specs that cover each testcase.
+Without the flag, assignment columns are omitted.
 
 `covered_tc_ids` is recalculated with the delta restriction
 disabled. Output spec IDs are reassigned after final sorting.

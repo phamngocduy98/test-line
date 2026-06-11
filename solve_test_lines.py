@@ -95,6 +95,11 @@ def parse_args() -> argparse.Namespace:
             "Ignored columns are blank in the output."
         ),
     )
+    parser.add_argument(
+        "--auto-assign",
+        action="store_true",
+        help="Assign testcases as evenly as possible across selected specs.",
+    )
     return parser.parse_args()
 
 
@@ -1036,6 +1041,73 @@ def solve_with_ortools(
     return solve_status, best_selected_indices
 
 
+def assign_cases_equally(
+    coverages: list[Iterable[int]],
+    cases: list[TestCase],
+) -> dict[int, list[int]]:
+    try:
+        from ortools.sat.python import cp_model
+    except ImportError:
+        raise SystemExit("Missing dependency: pip install ortools") from None
+
+    normalized_coverages = [set(coverage) for coverage in coverages]
+    model = cp_model.CpModel()
+    assignments: dict[tuple[int, int], object] = {}
+    coverers: dict[int, list[int]] = defaultdict(list)
+
+    for spec_index, covered in enumerate(normalized_coverages):
+        for case_index in covered:
+            var = model.NewBoolVar(f"assign_{case_index}_{spec_index}")
+            assignments[(case_index, spec_index)] = var
+            coverers[case_index].append(spec_index)
+
+    for case in cases:
+        if not coverers[case.index]:
+            raise SystemExit(f"no selected spec covers testcase {case.tc_id}")
+        model.Add(
+            sum(
+                assignments[(case.index, spec_index)]
+                for spec_index in coverers[case.index]
+            )
+            == 1
+        )
+
+    assigned_counts = []
+    for spec_index, covered in enumerate(normalized_coverages):
+        count = model.NewIntVar(0, len(cases), f"assigned_count_{spec_index}")
+        model.Add(
+            count
+            == sum(
+                assignments[(case_index, spec_index)]
+                for case_index in covered
+            )
+        )
+        assigned_counts.append(count)
+
+    max_assigned = model.NewIntVar(0, len(cases), "max_assigned")
+    min_assigned = model.NewIntVar(0, len(cases), "min_assigned")
+    model.AddMaxEquality(max_assigned, assigned_counts)
+    model.AddMinEquality(min_assigned, assigned_counts)
+
+    solver = cp_model.CpSolver()
+    solver.parameters.num_search_workers = 1
+    objectives = (max_assigned, -min_assigned)
+    for objective in objectives:
+        model.Minimize(objective)
+        status = solver.Solve(model)
+        if status != cp_model.OPTIMAL:
+            raise SystemExit("no balanced testcase assignment found")
+        model.Add(objective == int(solver.ObjectiveValue()))
+
+    assigned_by_spec = {index: [] for index in range(len(coverages))}
+    for (case_index, spec_index), var in assignments.items():
+        if solver.BooleanValue(var):
+            assigned_by_spec[spec_index].append(case_index)
+    for indices in assigned_by_spec.values():
+        indices.sort()
+    return assigned_by_spec
+
+
 def validate_solution(
     requirement_columns: list[str],
     cases: list[TestCase],
@@ -1098,16 +1170,20 @@ def write_output(
     candidates: list[Candidate],
     selected_indices: list[int],
     solve_status: str,
+    auto_assign: bool = False,
     enforce_delta: bool = True,
     support: RuBandSupport | None = None,
 ) -> tuple[int, int, int]:
-    output_columns = [
-        "spec_id",
+    output_columns = ["spec_id"]
+    if auto_assign:
+        output_columns.extend(["assigned_tc_ids", "assigned_count"])
+    output_columns.extend([
         "covered_tc_ids",
         "covered_count",
         "equipment_count",
         "solve_status",
-    ] + [column for column in input_columns if column != "tc_id"]
+    ])
+    output_columns.extend(column for column in input_columns if column != "tc_id")
 
     selected_sorted = sorted(
         selected_indices,
@@ -1117,6 +1193,13 @@ def write_output(
             min(candidates[index].covered),
         ),
     )
+
+    assigned_by_spec: dict[int, list[int]] = {}
+    if auto_assign:
+        assigned_by_spec = assign_cases_equally(
+            [candidates[index].covered for index in selected_sorted],
+            cases,
+        )
 
     with path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=output_columns)
@@ -1132,6 +1215,12 @@ def write_output(
                 "equipment_count": candidate.equipment_count,
                 "solve_status": solve_status,
             }
+            if auto_assign:
+                assigned = assigned_by_spec[spec_number - 1]
+                row["assigned_tc_ids"] = " + ".join(
+                    cases[index].tc_id for index in assigned
+                )
+                row["assigned_count"] = len(assigned)
             for column in requirement_columns:
                 row[column] = render_cell(candidate.spec[column])
             writer.writerow(row)
@@ -1190,6 +1279,7 @@ def main() -> int:
         candidates,
         selected_indices,
         solve_status,
+        auto_assign=args.auto_assign,
         support=support,
     )
 

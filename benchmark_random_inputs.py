@@ -96,6 +96,11 @@ def parse_args() -> argparse.Namespace:
         help="Pass --ignore-tech-and-ue-capa to the solver.",
     )
     parser.add_argument(
+        "--auto-assign",
+        action="store_true",
+        help="Pass --auto-assign to the solver.",
+    )
+    parser.add_argument(
         "--variation",
         choices=("low", "medium", "high"),
         default="medium",
@@ -308,6 +313,8 @@ def run_solver(args: argparse.Namespace) -> int:
     ]
     if args.ignore_tech_and_ue_capa:
         command.append("--ignore-tech-and-ue-capa")
+    if args.auto_assign:
+        command.append("--auto-assign")
     started_at = time.monotonic()
     completed = subprocess.run(command, text=True, capture_output=True)
     elapsed = time.monotonic() - started_at

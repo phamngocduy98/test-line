@@ -16,6 +16,7 @@ from merge_output_specs import (
     ru_count,
     ue_count,
     validate_merged_groups,
+    write_groups,
 )
 from solve_test_lines import RuBandSupport, TestCase, parse_cell
 
@@ -88,7 +89,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
@@ -116,7 +120,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
 
         self.assertEqual(count, 1)
@@ -141,7 +148,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
 
         self.assertEqual(count, 1)
@@ -175,7 +185,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
 
         self.assertEqual(count, 2)
@@ -200,12 +213,43 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=1,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
 
-    def test_du_limit_rejects_merge(self) -> None:
+    def test_individual_du_limits_reject_the_matching_column(self) -> None:
+        for column in ("enb", "vdu", "au", "cu"):
+            with self.subTest(column=column):
+                left = SpecGroup(
+                    0,
+                    [0],
+                    {"ru": ("rf-1",), column: ("3",)},
+                )
+                right = SpecGroup(
+                    1,
+                    [1],
+                    {"ru": ("rf-1",), column: ("1",)},
+                )
+                candidate, reason = merge_attempt(
+                    left,
+                    right,
+                    ["ru", column],
+                    make_support(),
+                    max_ru=3,
+                    max_enb=2,
+                    max_vdu=2,
+                    max_au=2,
+                    max_cu=2,
+                    max_ue=10,
+                )
+                self.assertIsNone(candidate)
+                self.assertEqual(reason, f"max_{column} actual=3 limit=2")
+
+    def test_enb_limit_rejects_merge(self) -> None:
         cases = [
             make_case(0, "A", ru="rf-1", enb="3"),
             make_case(1, "B", ru="rf-1", enb="4"),
@@ -221,7 +265,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
         self.assertEqual(count, 0)
         self.assertEqual(len(merged), 2)
@@ -245,7 +292,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
         )
         self.assertEqual(count, 1)
         self.assertEqual(len(merged), 1)
@@ -268,7 +318,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "enb", "lte band"],
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -294,7 +347,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "nr band"],
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -322,7 +378,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "lte band"],
             support,
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -345,7 +404,10 @@ class MergeHelpersTests(unittest.TestCase):
             cases,
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=4,
         )
 
@@ -362,7 +424,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "ue"],
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=3,
         )
 
@@ -389,7 +454,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "lte band"],
             support,
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -419,7 +487,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "nr band"],
             support,
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -447,7 +518,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "lte band"],
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -473,7 +547,10 @@ class MergeHelpersTests(unittest.TestCase):
             ["ru", "cc location"],
             make_support(),
             max_ru=3,
-            max_du=3,
+            max_enb=3,
+            max_vdu=3,
+            max_au=3,
+            max_cu=3,
             max_ue=10,
         )
 
@@ -498,7 +575,10 @@ class MergeHelpersTests(unittest.TestCase):
                 cases,
                 make_support(),
                 max_ru=1,
-                max_du=3,
+                max_enb=3,
+                max_vdu=3,
+                max_au=3,
+                max_cu=3,
                 verbose=True,
             )
 
@@ -532,7 +612,10 @@ class MergeHelpersTests(unittest.TestCase):
                 cases,
                 make_support(),
                 max_ru=3,
-                max_du=3,
+                max_enb=3,
+                max_vdu=3,
+                max_au=3,
+                max_cu=3,
                 verbose=True,
             )
 
@@ -568,7 +651,10 @@ class MergeHelpersTests(unittest.TestCase):
                 cases,
                 make_support(),
                 max_ru=3,
-                max_du=3,
+                max_enb=3,
+                max_vdu=3,
+                max_au=3,
+                max_cu=3,
                 verbose=True,
             )
 
@@ -632,9 +718,13 @@ class MergeIoTests(unittest.TestCase):
         ):
             args = parse_args()
         self.assertEqual(args.max_ru, 3)
-        self.assertEqual(args.max_du, 3)
+        self.assertEqual(args.max_enb, 2)
+        self.assertEqual(args.max_vdu, 2)
+        self.assertEqual(args.max_au, 2)
+        self.assertEqual(args.max_cu, 2)
         self.assertEqual(args.max_ue, 10)
         self.assertFalse(args.verbose)
+        self.assertFalse(args.auto_assign)
 
     def test_parse_args_accepts_verbose_short_option(self) -> None:
         with patch(
@@ -644,10 +734,41 @@ class MergeIoTests(unittest.TestCase):
                 "--ru-band-support",
                 "support.csv",
                 "-v",
+                "--auto-assign",
             ],
         ):
             args = parse_args()
         self.assertTrue(args.verbose)
+        self.assertTrue(args.auto_assign)
+
+    def test_write_groups_adds_balanced_assignments_when_enabled(self) -> None:
+        cases = [make_case(index, str(index), ru="rf-1") for index in range(3)]
+        groups = [
+            SpecGroup(0, [0, 1, 2], {"ru": ("rf-1",)}),
+            SpecGroup(1, [0, 1, 2], {"ru": ("rf-1",)}),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "merged.csv"
+            write_groups(
+                path,
+                [
+                    "spec_id",
+                    "covered_tc_ids",
+                    "covered_count",
+                    "equipment_count",
+                    "solve_status",
+                    "ru",
+                ],
+                ["ru"],
+                groups,
+                cases,
+                make_support(),
+                auto_assign=True,
+            )
+            with path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+        self.assertEqual(sorted(int(row["assigned_count"]) for row in rows), [1, 2])
+        self.assertIn("assigned_tc_ids", rows[0])
 
     def test_main_rejects_negative_max_ue(self) -> None:
         with patch(

@@ -207,8 +207,18 @@ avoid integer overflow and weight-tuning problems on large candidate pools.
 
 Phase 1 does not impose explicit RU, DU, or UE equipment caps. Its feasibility
 limits are the candidate-generation coverage and per-column delta rules. The
-`--max-ru`, `--max-du`, and `--max-ue` limits belong only to the optional
+`--max-ru`, per-column DU limits, and `--max-ue` belong only to the optional
 second-pass compaction script.
+
+## Automatic Assignment
+
+Passing `--auto-assign` assigns every testcase exactly once across the selected
+specs that cover it. Assignment is a post-solve step: it first minimizes the
+largest assigned count, then maximizes the smallest assigned count. Coverage
+constraints can prevent perfectly equal counts.
+
+When enabled, output adds `assigned_tc_ids` and `assigned_count`. Without the
+flag, the existing coverage-only output schema is unchanged.
 
 ## Timeout Behavior
 
@@ -228,6 +238,7 @@ completed stage if a later optimization stage reaches the timeout.
 `output_specs.csv` includes:
 
 - `spec_id`
+- `assigned_tc_ids` and `assigned_count` when `--auto-assign` is enabled
 - `covered_tc_ids`
 - `covered_count`
 - `equipment_count`

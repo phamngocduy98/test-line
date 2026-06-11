@@ -14,6 +14,7 @@ from solve_test_lines import (
     all_integer_tokens,
     alternatives,
     any_count,
+    assign_cases_equally,
     build_candidate,
     coarse_signature,
     concrete_tokens,
@@ -623,6 +624,18 @@ class CandidateTests(unittest.TestCase):
 
 
 class SolverAndValidationTests(unittest.TestCase):
+    def test_auto_assignment_balances_selected_specs(self) -> None:
+        cases = [make_case(index, str(index)) for index in range(5)]
+        assigned = assign_cases_equally(
+            [range(5), range(5)],
+            cases,
+        )
+        self.assertEqual(sorted(len(indices) for indices in assigned.values()), [2, 3])
+        self.assertEqual(
+            sorted(index for indices in assigned.values() for index in indices),
+            list(range(5)),
+        )
+
     def test_solver_selects_specs_covering_all_cases(self) -> None:
         cases = [make_case(0, "A", ru="a"), make_case(1, "B", ru="b")]
         candidates = generate_candidates(["ru"], cases, 10, 0)
@@ -729,6 +742,35 @@ class OutputTests(unittest.TestCase):
         self.assertEqual(rows[0]["ru"], "a")
         self.assertEqual(rows[0]["tech lte"], "")
 
+    def test_write_output_adds_balanced_assignments_when_enabled(self) -> None:
+        cases = [make_case(index, str(index), ru="a") for index in range(3)]
+        candidates = [
+            make_candidate({"ru": ("a",)}, (0, 1, 2), count=1),
+            make_candidate({"ru": ("a",)}, (0, 1, 2), count=1),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "output.csv"
+            write_output(
+                path,
+                ["tc_id", "ru"],
+                ["ru"],
+                cases,
+                candidates,
+                [0, 1],
+                "OPTIMAL",
+                auto_assign=True,
+            )
+            with path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+        self.assertEqual(sorted(int(row["assigned_count"]) for row in rows), [1, 2])
+        assigned_ids = {
+            tc_id
+            for row in rows
+            for tc_id in row["assigned_tc_ids"].split(" + ")
+            if tc_id
+        }
+        self.assertEqual(assigned_ids, {"0", "1", "2"})
+
 
 class CliTests(unittest.TestCase):
     def test_parse_args_defaults(self) -> None:
@@ -742,6 +784,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.ru_band_support, "support.csv")
         self.assertEqual(args.timeout, 600.0)
         self.assertFalse(args.ignore_tech_and_ue_capa)
+        self.assertFalse(args.auto_assign)
 
     def test_parse_args_accepts_all_options(self) -> None:
         argv = [
@@ -759,6 +802,7 @@ class CliTests(unittest.TestCase):
             "--max-cover-checks-per-candidate",
             "7",
             "--ignore-tech-and-ue-capa",
+            "--auto-assign",
         ]
         with patch("sys.argv", argv):
             args = parse_args()
@@ -769,6 +813,7 @@ class CliTests(unittest.TestCase):
         self.assertEqual(args.max_candidates_per_bucket, 5)
         self.assertEqual(args.max_cover_checks_per_candidate, 7)
         self.assertTrue(args.ignore_tech_and_ue_capa)
+        self.assertTrue(args.auto_assign)
 
     def test_main_rejects_empty_candidate_pool(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
