@@ -49,8 +49,10 @@ from solve_test_lines import (
     numeric_equipment,
     parse_cell,
     render_cell,
+    resolve_compatibility_variants,
     single_select_key,
     spec_has_compatible_ru_bands,
+    spec_signature,
     validate_support_references,
 )
 
@@ -78,20 +80,26 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ue-weight", type=float, default=1.0, help="Cost weight for each UE slot. Default: 1.0")
     parser.add_argument("--time-limit", type=float, default=300.0, help="Search time limit in seconds. Default: 300.")
     parser.add_argument(
-        "--temperature-start", type=float, default=5.0,
-        help="Initial SA temperature. Default: 5.0",
+        "--temperature-start", type=float, default=2.0,
+        help="Initial SA temperature. Default: 2.0",
     )
     parser.add_argument(
-        "--cooling-rate", type=float, default=0.9995,
-        help="SA cooling rate per iteration. Default: 0.9995",
+        "--cooling-rate", type=float, default=0.995,
+        help="SA cooling rate per iteration. Default: 0.995",
     )
     parser.add_argument(
-        "--restart-interval", type=int, default=20000,
-        help="Restart from best solution every N iterations. Default: 20000",
+        "--restart-interval", type=int, default=10000,
+        help="Restart from best solution every N iterations. Default: 10000",
     )
     parser.add_argument(
         "--ignore-tech-and-ue-capa", action="store_true",
         help="Ignore tech and ue capa columns (blank in output).",
+    )
+    parser.add_argument(
+        "--initial-strategy",
+        choices=("greedy",),
+        default="greedy",
+        help="Initial assignment strategy. Default: greedy.",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed. Default: 42")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print search progress.")
@@ -124,6 +132,34 @@ def spec_cost(
     return weights.du * du + weights.ru * ru + weights.ue * ue
 
 
+def materialize_spec(
+    raw_spec: dict[str, tuple[str, ...]],
+    requirement_columns: list[str],
+    weights: EquipmentWeights,
+    support: RuBandSupport,
+) -> dict[str, tuple[str, ...]] | None:
+    """Resolve RU/LTE/NR wildcards into a concrete compatible line spec.
+
+    Line packing keeps raw merged requirements for future moves, but every cost,
+    coverage check, and output row must use a physically valid concrete spec.
+    """
+    variants = resolve_compatibility_variants(raw_spec, support)
+    feasible = [
+        variant
+        for variant in variants
+        if spec_has_compatible_ru_bands(variant, support)
+    ]
+    if not feasible:
+        return None
+    return min(
+        feasible,
+        key=lambda variant: (
+            spec_cost(variant, requirement_columns, weights),
+            spec_signature(variant),
+        ),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Line state  (mutable, incrementally maintained)
 # ---------------------------------------------------------------------------
@@ -144,7 +180,10 @@ class Line:
     line_id: int = field(default_factory=_next_line_id)
     case_indices: set[int] = field(default_factory=set)
 
-    # Maintained lazily: recomputed whenever _dirty is True
+    # Maintained lazily: recomputed whenever _dirty is True. _raw_spec keeps
+    # wildcard requirements flexible for future moves; _spec is the concrete
+    # RU/band-compatible realization used for cost, validation, and output.
+    _raw_spec: dict[str, tuple[str, ...]] = field(default_factory=dict, repr=False)
     _spec: dict[str, tuple[str, ...]] = field(default_factory=dict, repr=False)
     _cost: float = field(default=0.0, repr=False)
     _dirty: bool = field(default=True, repr=False)
@@ -157,37 +196,63 @@ class Line:
         cases: list[TestCase],
         requirement_columns: list[str],
         weights: EquipmentWeights,
+        support: RuBandSupport,
     ) -> None:
         if not self.case_indices:
+            self._raw_spec = {col: () for col in requirement_columns}
             self._spec = {col: () for col in requirement_columns}
             self._cost = 0.0
             self._dirty = False
             self._ss_key = ()
             return
+
         assigned = [cases[i] for i in self.case_indices]
-        spec = merge_cases(requirement_columns, assigned)
-        # merge_cases returns None only on single-select conflict;
-        # we prevent that during assignment so this should never be None.
-        assert spec is not None, "Line has irreconcilable single-select conflict"
+        raw_spec = merge_cases(requirement_columns, assigned)
+        if raw_spec is None:
+            raise SystemExit(
+                f"line {self.line_id} has irreconcilable single-select conflict"
+            )
+        spec = materialize_spec(raw_spec, requirement_columns, weights, support)
+        if spec is None:
+            ids = ", ".join(cases[i].tc_id for i in sorted(self.case_indices))
+            raise SystemExit(
+                f"line {self.line_id} has no compatible RU-band realization: {ids}"
+            )
+
+        self._raw_spec = raw_spec
         self._spec = spec
         self._cost = spec_cost(spec, requirement_columns, weights)
         self._dirty = False
-        # Single-select key: concrete values for each single-select column
+
+        # Single-select key comes from the raw merged requirements; RU/band
+        # materialization must not affect single-select compatibility.
         ss: list[tuple[str, tuple[str, ...]]] = []
         for col in SINGLE_SELECT_COLUMNS:
-            if col in spec:
-                concrete = tuple(t for t in spec[col] if not is_any(t))
+            if col in raw_spec:
+                concrete = tuple(t for t in raw_spec[col] if not is_any(t))
                 ss.append((col, concrete))
         self._ss_key = tuple(sorted(ss))
+
+    def get_raw_spec(
+        self,
+        cases: list[TestCase],
+        requirement_columns: list[str],
+        weights: EquipmentWeights,
+        support: RuBandSupport,
+    ) -> dict[str, tuple[str, ...]]:
+        if self._dirty:
+            self._recompute(cases, requirement_columns, weights, support)
+        return self._raw_spec
 
     def get_spec(
         self,
         cases: list[TestCase],
         requirement_columns: list[str],
         weights: EquipmentWeights,
+        support: RuBandSupport,
     ) -> dict[str, tuple[str, ...]]:
         if self._dirty:
-            self._recompute(cases, requirement_columns, weights)
+            self._recompute(cases, requirement_columns, weights, support)
         return self._spec
 
     def get_cost(
@@ -195,9 +260,10 @@ class Line:
         cases: list[TestCase],
         requirement_columns: list[str],
         weights: EquipmentWeights,
+        support: RuBandSupport,
     ) -> float:
         if self._dirty:
-            self._recompute(cases, requirement_columns, weights)
+            self._recompute(cases, requirement_columns, weights, support)
         return self._cost
 
     def get_ss_key(
@@ -205,9 +271,10 @@ class Line:
         cases: list[TestCase],
         requirement_columns: list[str],
         weights: EquipmentWeights,
+        support: RuBandSupport,
     ) -> tuple:
         if self._dirty:
-            self._recompute(cases, requirement_columns, weights)
+            self._recompute(cases, requirement_columns, weights, support)
         return self._ss_key  # type: ignore[return-value]
 
     def mark_dirty(self) -> None:
@@ -223,10 +290,20 @@ class Line:
         requirement_columns: list[str],
         weights: EquipmentWeights,
         cases: list[TestCase],
+        support: RuBandSupport,
     ) -> float | None:
-        """Return hypothetical cost after adding *case*, or None if incompatible."""
-        current_spec = self.get_spec(cases, requirement_columns, weights)
-        new_spec = _merge_spec_with_case(current_spec, case, requirement_columns)
+        """Return hypothetical concrete cost after adding *case*, or None if incompatible."""
+        current_raw_spec = self.get_raw_spec(
+            cases, requirement_columns, weights, support
+        )
+        new_raw_spec = _merge_spec_with_case(
+            current_raw_spec, case, requirement_columns
+        )
+        if new_raw_spec is None:
+            return None
+        new_spec = materialize_spec(
+            new_raw_spec, requirement_columns, weights, support
+        )
         if new_spec is None:
             return None
         return spec_cost(new_spec, requirement_columns, weights)
@@ -237,13 +314,18 @@ class Line:
         requirement_columns: list[str],
         weights: EquipmentWeights,
         cases: list[TestCase],
-    ) -> float:
-        """Return hypothetical cost after removing *case*."""
+        support: RuBandSupport,
+    ) -> float | None:
+        """Return hypothetical concrete cost after removing *case*."""
         remaining = [cases[i] for i in self.case_indices if i != case.index]
         if not remaining:
             return 0.0
-        spec = merge_cases(requirement_columns, remaining)
-        assert spec is not None
+        raw_spec = merge_cases(requirement_columns, remaining)
+        if raw_spec is None:
+            return None
+        spec = materialize_spec(raw_spec, requirement_columns, weights, support)
+        if spec is None:
+            return None
         return spec_cost(spec, requirement_columns, weights)
 
     def cost_if_swap(
@@ -253,11 +335,15 @@ class Line:
         requirement_columns: list[str],
         weights: EquipmentWeights,
         cases: list[TestCase],
+        support: RuBandSupport,
     ) -> float | None:
-        """Return hypothetical cost after replacing *remove_case* with *add_case*, or None if incompatible."""
+        """Return hypothetical concrete cost after replacing *remove_case* with *add_case*."""
         remaining = [cases[i] for i in self.case_indices if i != remove_case.index]
         remaining.append(add_case)
-        spec = merge_cases(requirement_columns, remaining)
+        raw_spec = merge_cases(requirement_columns, remaining)
+        if raw_spec is None:
+            return None
+        spec = materialize_spec(raw_spec, requirement_columns, weights, support)
         if spec is None:
             return None
         return spec_cost(spec, requirement_columns, weights)
@@ -329,9 +415,10 @@ class Assignment:
         cases: list[TestCase],
         requirement_columns: list[str],
         weights: EquipmentWeights,
+        support: RuBandSupport,
     ) -> float:
         return sum(
-            line.get_cost(cases, requirement_columns, weights)
+            line.get_cost(cases, requirement_columns, weights, support)
             for line in self.lines
             if line.case_indices
         )
@@ -346,6 +433,7 @@ class Assignment:
             new_line = Line(
                 line_id=line.line_id,
                 case_indices=set(line.case_indices),
+                _raw_spec=dict(line._raw_spec),
                 _spec=dict(line._spec),
                 _cost=line._cost,
                 _dirty=line._dirty,
@@ -369,9 +457,15 @@ def _case_base_cost(
     case: TestCase,
     requirement_columns: list[str],
     weights: EquipmentWeights,
+    support: RuBandSupport,
 ) -> float:
-    """Approximate cost of a single test case as a standalone line."""
-    spec = {col: case.tokens.get(col, ()) for col in requirement_columns}
+    """Cost of a single test case as a standalone concrete line."""
+    raw_spec = {col: case.tokens.get(col, ()) for col in requirement_columns}
+    spec = materialize_spec(raw_spec, requirement_columns, weights, support)
+    if spec is None:
+        raise SystemExit(
+            f"testcase {case.tc_id} has no compatible RU-band realization"
+        )
     return spec_cost(spec, requirement_columns, weights)
 
 
@@ -393,13 +487,13 @@ def greedy_initial(
     # Sort: heaviest cases first so expensive cases claim lines early
     sorted_cases = sorted(
         cases,
-        key=lambda c: (_case_base_cost(c, requirement_columns, weights), c.index),
+        key=lambda c: (_case_base_cost(c, requirement_columns, weights, support), c.index),
         reverse=True,
     )
 
     for case in sorted_cases:
         best_line: Line | None = None
-        best_cost_after: float = math.inf
+        best_delta: float = math.inf
 
         active = assignment.active_lines()
         # Shuffle candidate lines slightly to break ties non-deterministically
@@ -409,14 +503,16 @@ def greedy_initial(
             if len(line.case_indices) >= max_cases_per_line:
                 continue
             # Fast reject: single-select conflict
-            ss_key = line.get_ss_key(cases, requirement_columns, weights)
+            ss_key = line.get_ss_key(cases, requirement_columns, weights, support)
             if not _ss_compatible(ss_key, case):
                 continue
-            cost_after = line.cost_if_add(case, requirement_columns, weights, cases)
+            cost_before = line.get_cost(cases, requirement_columns, weights, support)
+            cost_after = line.cost_if_add(case, requirement_columns, weights, cases, support)
             if cost_after is None:
-                continue  # merge conflict (shouldn't happen after ss check, but guard)
-            if cost_after < best_cost_after:
-                best_cost_after = cost_after
+                continue  # merge conflict or no RU-band-compatible realization
+            delta = cost_after - cost_before
+            if delta < best_delta:
+                best_delta = delta
                 best_line = line
 
         if best_line is None:
@@ -444,6 +540,7 @@ def _try_transfer(
     cases: list[TestCase],
     requirement_columns: list[str],
     weights: EquipmentWeights,
+    support: RuBandSupport,
     max_cases_per_line: int,
 ) -> float | None:
     """
@@ -455,16 +552,16 @@ def _try_transfer(
     if len(from_line.case_indices) <= 1:
         # Would empty from_line; allow only if we then remove it (handled by caller)
         pass
-    ss_key = to_line.get_ss_key(cases, requirement_columns, weights)
+    ss_key = to_line.get_ss_key(cases, requirement_columns, weights, support)
     if not _ss_compatible(ss_key, case):
         return None
 
-    cost_from_before = from_line.get_cost(cases, requirement_columns, weights)
-    cost_to_before = to_line.get_cost(cases, requirement_columns, weights)
+    cost_from_before = from_line.get_cost(cases, requirement_columns, weights, support)
+    cost_to_before = to_line.get_cost(cases, requirement_columns, weights, support)
 
-    cost_from_after = from_line.cost_if_remove(case, requirement_columns, weights, cases)
-    cost_to_after = to_line.cost_if_add(case, requirement_columns, weights, cases)
-    if cost_to_after is None:
+    cost_from_after = from_line.cost_if_remove(case, requirement_columns, weights, cases, support)
+    cost_to_after = to_line.cost_if_add(case, requirement_columns, weights, cases, support)
+    if cost_from_after is None or cost_to_after is None:
         return None
 
     return (cost_from_after + cost_to_after) - (cost_from_before + cost_to_before)
@@ -478,6 +575,7 @@ def _try_swap(
     cases: list[TestCase],
     requirement_columns: list[str],
     weights: EquipmentWeights,
+    support: RuBandSupport,
 ) -> float | None:
     """
     Compute cost delta for swapping *case_a* (on *line_a*) with *case_b* (on *line_b*).
@@ -489,11 +587,11 @@ def _try_swap(
     # and line_b without case_b can accept case_a
     # (Full check is done via cost_if_swap which calls merge_cases)
 
-    cost_a_before = line_a.get_cost(cases, requirement_columns, weights)
-    cost_b_before = line_b.get_cost(cases, requirement_columns, weights)
+    cost_a_before = line_a.get_cost(cases, requirement_columns, weights, support)
+    cost_b_before = line_b.get_cost(cases, requirement_columns, weights, support)
 
-    cost_a_after = line_a.cost_if_swap(case_b, case_a, requirement_columns, weights, cases)
-    cost_b_after = line_b.cost_if_swap(case_a, case_b, requirement_columns, weights, cases)
+    cost_a_after = line_a.cost_if_swap(case_b, case_a, requirement_columns, weights, cases, support)
+    cost_b_after = line_b.cost_if_swap(case_a, case_b, requirement_columns, weights, cases, support)
 
     if cost_a_after is None or cost_b_after is None:
         return None
@@ -507,6 +605,7 @@ def _try_merge_lines(
     cases: list[TestCase],
     requirement_columns: list[str],
     weights: EquipmentWeights,
+    support: RuBandSupport,
     max_cases_per_line: int,
 ) -> float | None:
     """
@@ -517,14 +616,17 @@ def _try_merge_lines(
         return None
 
     combined_cases = [cases[i] for i in line_a.case_indices | line_b.case_indices]
-    merged_spec = merge_cases(requirement_columns, combined_cases)
+    raw_spec = merge_cases(requirement_columns, combined_cases)
+    if raw_spec is None:
+        return None
+    merged_spec = materialize_spec(raw_spec, requirement_columns, weights, support)
     if merged_spec is None:
         return None
 
     cost_combined = spec_cost(merged_spec, requirement_columns, weights)
     cost_before = (
-        line_a.get_cost(cases, requirement_columns, weights)
-        + line_b.get_cost(cases, requirement_columns, weights)
+        line_a.get_cost(cases, requirement_columns, weights, support)
+        + line_b.get_cost(cases, requirement_columns, weights, support)
     )
     return cost_combined - cost_before
 
@@ -534,6 +636,7 @@ def _try_split_line(
     cases: list[TestCase],
     requirement_columns: list[str],
     weights: EquipmentWeights,
+    support: RuBandSupport,
     rng: random.Random,
 ) -> tuple[float, list[int], list[int]] | None:
     """
@@ -547,13 +650,17 @@ def _try_split_line(
         return None
 
     line_cases = [cases[i] for i in line.case_indices]
-    cost_before = line.get_cost(cases, requirement_columns, weights)
+    cost_before = line.get_cost(cases, requirement_columns, weights, support)
 
     def eval_split(
         group_a: list[TestCase], group_b: list[TestCase]
     ) -> float | None:
-        spec_a = merge_cases(requirement_columns, group_a)
-        spec_b = merge_cases(requirement_columns, group_b)
+        raw_a = merge_cases(requirement_columns, group_a)
+        raw_b = merge_cases(requirement_columns, group_b)
+        if raw_a is None or raw_b is None:
+            return None
+        spec_a = materialize_spec(raw_a, requirement_columns, weights, support)
+        spec_b = materialize_spec(raw_b, requirement_columns, weights, support)
         if spec_a is None or spec_b is None:
             return None
         return (
@@ -564,7 +671,7 @@ def _try_split_line(
     # Split 1: by standalone cost
     sorted_by_cost = sorted(
         line_cases,
-        key=lambda c: _case_base_cost(c, requirement_columns, weights),
+        key=lambda c: _case_base_cost(c, requirement_columns, weights, support),
     )
     mid = len(sorted_by_cost) // 2
     cost_split1 = eval_split(sorted_by_cost[:mid], sorted_by_cost[mid:])
@@ -659,6 +766,7 @@ def local_search(
     requirement_columns: list[str],
     weights: EquipmentWeights,
     max_cases_per_line: int,
+    support: RuBandSupport,
     time_limit: float,
     temperature_start: float,
     cooling_rate: float,
@@ -668,7 +776,7 @@ def local_search(
 ) -> Assignment:
     current = initial.deep_copy()
     best = initial.deep_copy()
-    best_cost = best.total_cost(cases, requirement_columns, weights)
+    best_cost = best.total_cost(cases, requirement_columns, weights, support)
     current_cost = best_cost
 
     T = temperature_start
@@ -726,7 +834,7 @@ def local_search(
                     continue
                 d = _try_transfer(
                     case, from_line, to_line, cases,
-                    requirement_columns, weights, max_cases_per_line,
+                    requirement_columns, weights, support, max_cases_per_line,
                 )
                 if d is not None and d < best_delta:
                     best_delta = d
@@ -748,7 +856,7 @@ def local_search(
 
             delta = _try_swap(
                 case_a, line_a, case_b, line_b,
-                cases, requirement_columns, weights,
+                cases, requirement_columns, weights, support,
             )
             if delta is not None:
                 if delta < 0 or (T > 1e-9 and rng.random() < math.exp(-delta / T)):
@@ -765,7 +873,7 @@ def local_search(
             best_partner = None
             for line_b in candidates:
                 d = _try_merge_lines(
-                    line_a, line_b, cases, requirement_columns, weights, max_cases_per_line,
+                    line_a, line_b, cases, requirement_columns, weights, support, max_cases_per_line,
                 )
                 if d is not None and d < best_delta:
                     best_delta = d
@@ -781,11 +889,11 @@ def local_search(
             # Pick highest-cost line to split
             by_cost = sorted(
                 active,
-                key=lambda l: l.get_cost(cases, requirement_columns, weights),
+                key=lambda l: l.get_cost(cases, requirement_columns, weights, support),
                 reverse=True,
             )
             for line in by_cost[:3]:
-                result = _try_split_line(line, cases, requirement_columns, weights, rng)
+                result = _try_split_line(line, cases, requirement_columns, weights, support, rng)
                 if result is not None:
                     delta, group_a, group_b = result
                     # Split always reduces cost (delta < 0 guaranteed by _try_split_line)
@@ -825,6 +933,7 @@ def validate_assignment(
     assignment: Assignment,
     cases: list[TestCase],
     requirement_columns: list[str],
+    weights: EquipmentWeights,
     support: RuBandSupport,
     max_cases_per_line: int,
 ) -> None:
@@ -848,11 +957,21 @@ def validate_assignment(
                 f"validation failed: line {line.line_id} has {len(line.case_indices)} cases "
                 f"(limit {max_cases_per_line})"
             )
-        spec = line._spec  # already computed
-        # 3. RU-band compatibility
+        spec = line.get_spec(cases, requirement_columns, weights, support)
+        raw_spec = line.get_raw_spec(cases, requirement_columns, weights, support)
+        # 3. Single-select columns must not contain multiple concrete values.
+        for column in SINGLE_SELECT_COLUMNS:
+            if column not in raw_spec:
+                continue
+            concrete = [token for token in raw_spec[column] if not is_any(token)]
+            if len(concrete) > 1:
+                raise SystemExit(
+                    f"validation failed: line {line.line_id} has multiple concrete values in {column}"
+                )
+        # 4. RU-band compatibility
         if not spec_has_compatible_ru_bands(spec, support):
             raise SystemExit(f"validation failed: line {line.line_id} has incompatible RU-band spec")
-        # 4. Every case is covered by its line's spec
+        # 5. Every case is covered by its line's spec
         for idx in line.case_indices:
             case = cases[idx]
             ok, _ = coverage_delta(
@@ -881,7 +1000,7 @@ def write_output(
 ) -> None:
     # Force recompute all specs before writing
     for line in assignment.active_lines():
-        line.get_spec(cases, requirement_columns, weights)
+        line.get_spec(cases, requirement_columns, weights, support)
 
     # Group lines by spec signature for spec_id assignment
     from solve_test_lines import spec_signature
@@ -913,7 +1032,7 @@ def write_output(
     sorted_lines = sorted(
         assignment.active_lines(),
         key=lambda l: (
-            l.get_cost(cases, requirement_columns, weights),
+            l.get_cost(cases, requirement_columns, weights, support),
             -len(l.case_indices),
             min(l.case_indices),
         ),
@@ -924,7 +1043,7 @@ def write_output(
         writer.writeheader()
 
         for line_number, line in enumerate(sorted_lines, start=1):
-            spec = line.get_spec(cases, requirement_columns, weights)
+            spec = line.get_spec(cases, requirement_columns, weights, support)
             covered_ids = sorted(line.case_indices)
             du = sum(
                 numeric_equipment(spec.get(col, ()))
@@ -933,7 +1052,7 @@ def write_output(
             )
             ru = len(spec.get(RU_COLUMN, ())) if RU_COLUMN in requirement_columns else 0
             ue = numeric_equipment(spec.get(UE_COLUMN, ())) if UE_COLUMN in requirement_columns else 0
-            cost = line.get_cost(cases, requirement_columns, weights)
+            cost = line.get_cost(cases, requirement_columns, weights, support)
             eq_count = du + ru + ue
 
             row: dict[str, object] = {
@@ -995,7 +1114,7 @@ def main() -> int:
     initial = greedy_initial(
         cases, requirement_columns, weights, args.max_cases_per_line, support, rng,
     )
-    initial_cost = initial.total_cost(cases, requirement_columns, weights)
+    initial_cost = initial.total_cost(cases, requirement_columns, weights, support)
     n_initial_lines = len(initial.active_lines())
     print(f"Initial solution: {n_initial_lines} lines, total cost = {initial_cost:.2f}")
 
@@ -1007,6 +1126,7 @@ def main() -> int:
         requirement_columns=requirement_columns,
         weights=weights,
         max_cases_per_line=args.max_cases_per_line,
+        support=support,
         time_limit=args.time_limit,
         temperature_start=args.temperature_start,
         cooling_rate=args.cooling_rate,
@@ -1015,22 +1135,23 @@ def main() -> int:
         verbose=args.verbose,
     )
 
-    final_cost = best.total_cost(cases, requirement_columns, weights)
+    final_cost = best.total_cost(cases, requirement_columns, weights, support)
     final_lines = best.active_lines()
     n_final_lines = len(final_lines)
 
     # Force recompute specs before validation
     for line in final_lines:
-        line.get_spec(cases, requirement_columns, weights)
+        line.get_spec(cases, requirement_columns, weights, support)
 
     print("Validating solution ...")
-    validate_assignment(best, cases, requirement_columns, support, args.max_cases_per_line)
+    validate_assignment(best, cases, requirement_columns, weights, support, args.max_cases_per_line)
 
     # Gather unique specs
-    from solve_test_lines import spec_signature
     unique_specs: set[tuple] = set()
     for line in final_lines:
-        unique_specs.add(spec_signature(line._spec))
+        unique_specs.add(
+            spec_signature(line.get_spec(cases, requirement_columns, weights, support))
+        )
 
     improvement_pct = 100.0 * (initial_cost - final_cost) / initial_cost if initial_cost > 0 else 0.0
     elapsed = time.monotonic() - started_at
