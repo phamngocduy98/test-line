@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 
@@ -70,6 +70,9 @@ class Candidate:
     equipment_count: int
     coverage: frozenset[int]
     assignment_excess: dict[int, int]
+    group_coverage_mask: int = 0
+    group_assignment_excess: dict[int, int] = field(default_factory=dict)
+    group_weights: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -77,4 +80,3 @@ class Solution:
     candidates: tuple[Candidate, ...]
     assignments: dict[int, Candidate]
     status: str
-

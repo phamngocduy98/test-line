@@ -8,7 +8,8 @@ from pathlib import Path
 from test_line_solver.candidates import generate_candidates
 from test_line_solver.coverage import active_requirement_columns, coverage_excess
 from test_line_solver.merge import merge_specs
-from test_line_solver.models import SolveOptions, Token
+from test_line_solver.models import Candidate, Solution, SolveOptions, Token
+from test_line_solver.output import write_solution_csv
 from test_line_solver.optimizer import optimize
 from test_line_solver.parsing import read_ru_band_csv, read_testcase_csv
 from test_line_solver.solver import solve_to_csv
@@ -205,6 +206,25 @@ class DomainSolverTests(unittest.TestCase):
             self.assertEqual("", row["lte band"])
             self.assertEqual("", row["nr band"])
             self.assertEqual("A", row["cc location"])
+
+    def test_output_rejects_selected_specs_that_lose_expanded_coverage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band\nT1,any,b2\n",
+                "ru,lte_band,nr_band\nRU1,b1,\nRU2,b2,\n",
+            )
+            candidate = Candidate(
+                signature="bad",
+                spec={"ru": (Token(("RU1",)),), "lte band": (Token(("b2",)),)},
+                source_indexes=(0,),
+                equipment_count=1,
+                coverage=frozenset({0}),
+                assignment_excess={0: 0},
+            )
+            with self.assertRaisesRegex(ValueError, "expanded solution does not cover"):
+                write_solution_csv(directory / "output.csv", parsed, support, Solution((candidate,), {0: candidate}, "OPTIMAL"), SolveOptions())
 
 
 if __name__ == "__main__":

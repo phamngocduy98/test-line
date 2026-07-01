@@ -2,21 +2,23 @@
 
 from __future__ import annotations
 
-from .coverage import active_requirement_columns, coverage_excess, equipment_count
+from .coverage import active_requirement_columns, equipment_count
 from .constants import NUMERIC_COLUMNS
+from .indexing import CoverageIndex
 from .merge import exact_spec, merge_specs, spec_signature
 from .models import Candidate, ParsedCsv, SolveOptions, SupportTable, Token
 
 
 def generate_candidates(parsed: ParsedCsv, support: SupportTable, options: SolveOptions) -> tuple[Candidate, ...]:
     columns = active_requirement_columns(parsed.columns, options)
+    coverage_index = CoverageIndex.build(parsed, support, options)
     exact_specs = [exact_spec(row.tokens, columns) for row in parsed.rows]
     max_slots_by_column = _max_slots_by_column(parsed, columns)
     candidates: list[Candidate] = []
     seen: set[str] = set()
 
     for index, spec in enumerate(exact_specs):
-        _add_candidate(candidates, seen, spec, (index,), parsed, columns, support, options)
+        _add_candidate(candidates, seen, spec, (index,), coverage_index)
 
     if len(candidates) >= options.max_candidates:
         return tuple(candidates)
@@ -32,7 +34,7 @@ def generate_candidates(parsed: ParsedCsv, support: SupportTable, options: Solve
             current = merge_specs(current, exact_specs[end], columns)
             if _too_broad_for_any_testcase(current, columns, max_slots_by_column, options.max_extra_slots):
                 break
-            added = _add_candidate(candidates, seen, current, tuple(range(start, end + 1)), parsed, columns, support, options)
+            added = _add_candidate(candidates, seen, current, tuple(range(start, end + 1)), coverage_index)
             if added:
                 generated_by_bucket[bucket] = generated_by_bucket.get(bucket, 0) + 1
             if len(candidates) >= options.max_candidates:
@@ -68,23 +70,22 @@ def _add_candidate(
     seen: set[str],
     spec: dict[str, tuple[Token, ...]],
     source_indexes: tuple[int, ...],
-    parsed: ParsedCsv,
-    columns: tuple[str, ...],
-    support: SupportTable,
-    options: SolveOptions,
+    coverage_index: CoverageIndex,
 ) -> bool:
+    columns = coverage_index.columns
     signature = spec_signature(spec, columns)
     if signature in seen:
         return False
-    coverage: set[int] = set()
-    excess: dict[int, int] = {}
-    for index, row in enumerate(parsed.rows):
-        result = coverage_excess(row.tokens, spec, columns, support, options)
-        if result is not None:
-            coverage.add(index)
-            excess[index] = result.excess
-    if not coverage:
+    indexed = coverage_index.coverage_for_spec(spec)
+    if not indexed.row_indexes:
         return False
+    excess: dict[int, int] = {}
+    for group_index, group in enumerate(coverage_index.groups):
+        if not indexed.group_mask & (1 << group_index):
+            continue
+        group_excess = indexed.excess_by_group.get(group_index, 0)
+        for row_index in group.row_indexes:
+            excess[row_index] = group_excess
     seen.add(signature)
     candidates.append(
         Candidate(
@@ -92,8 +93,11 @@ def _add_candidate(
             spec=spec,
             source_indexes=source_indexes,
             equipment_count=equipment_count(spec),
-            coverage=frozenset(coverage),
+            coverage=frozenset(indexed.row_indexes),
             assignment_excess=excess,
+            group_coverage_mask=indexed.group_mask,
+            group_assignment_excess=indexed.excess_by_group,
+            group_weights=tuple(group.weight for group in coverage_index.groups),
         )
     )
     return True

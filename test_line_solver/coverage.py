@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import combinations, product
 
 from .constants import BAND_COLUMNS, NUMERIC_COLUMNS, OPTIONAL_COLUMNS
@@ -32,6 +33,10 @@ def equipment_count(spec: dict[str, tuple[Token, ...]]) -> int:
     total = sum(numeric_value(spec.get(column, ())) for column in NUMERIC_COLUMNS)
     total += len(spec.get("ru", ()))
     return total
+
+
+def spec_ru_band_compatible(spec: dict[str, tuple[Token, ...]], support: SupportTable) -> bool:
+    return _ru_band_compatible(spec, support)
 
 
 def coverage_excess(
@@ -106,6 +111,23 @@ def _best_slot_match_excess(
     spec: tuple[Token, ...],
     options: SolveOptions,
 ) -> int | None:
+    return _best_slot_match_excess_cached(
+        column,
+        tuple(token.normalized() for token in testcase),
+        tuple(token.normalized() for token in spec),
+        options.max_extra_alternatives,
+        column in options.reject_spec_side_wildcard,
+    )
+
+
+@lru_cache(maxsize=50000)
+def _best_slot_match_excess_cached(
+    column: str,
+    testcase: tuple[tuple[str, ...], ...],
+    spec: tuple[tuple[str, ...], ...],
+    max_extra_alternatives: int,
+    reject_spec_side_wildcard: bool,
+) -> int | None:
     if not testcase:
         return 0
 
@@ -124,7 +146,12 @@ def _best_slot_match_excess(
         for spec_index, spec_token in enumerate(spec):
             if spec_index in used:
                 continue
-            slot_excess = _slot_excess(column, testcase[tc_index], spec_token, options)
+            slot_excess = _slot_excess_values(
+                testcase[tc_index],
+                spec_token,
+                max_extra_alternatives,
+                reject_spec_side_wildcard,
+            )
             if slot_excess is None:
                 continue
             used.add(spec_index)
@@ -135,19 +162,24 @@ def _best_slot_match_excess(
     return None if best is None else best[0]
 
 
-def _slot_excess(column: str, testcase: Token, spec: Token, options: SolveOptions) -> int | None:
-    tc_values = {value.casefold() for value in testcase.alternatives}
-    spec_values = {value.casefold() for value in spec.alternatives}
+def _slot_excess_values(
+    testcase: tuple[str, ...],
+    spec: tuple[str, ...],
+    max_extra_alternatives: int,
+    reject_spec_side_wildcard: bool,
+) -> int | None:
+    tc_values = set(testcase)
+    spec_values = set(spec)
     if "any" in tc_values:
         return 0
     if "any" in spec_values:
-        if column in options.reject_spec_side_wildcard:
+        if reject_spec_side_wildcard:
             return None
         return 1
     if not (tc_values & spec_values):
         return None
     extra = len(spec_values - tc_values)
-    if extra > options.max_extra_alternatives:
+    if extra > max_extra_alternatives:
         return None
     return extra
 

@@ -5,7 +5,8 @@ from __future__ import annotations
 import csv
 from pathlib import Path
 
-from .coverage import active_requirement_columns, coverage_excess, equipment_count
+from .coverage import equipment_count
+from .indexing import CoverageIndex, IndexedCoverage
 from .models import Candidate, ParsedCsv, Solution, SolveOptions, SupportTable, Token
 from .parsing import render_tokens
 
@@ -21,21 +22,22 @@ def expanded_spec(spec: dict[str, tuple[Token, ...]], support: SupportTable) -> 
 
 
 def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, solution: Solution, options: SolveOptions) -> None:
-    columns = active_requirement_columns(parsed.columns, options)
     output_requirement_columns = tuple(column for column in parsed.columns if column != "tc_id")
+    coverage_index = CoverageIndex.build(parsed, support, options)
     rows = []
     for candidate in solution.candidates:
         spec = expanded_spec(candidate.spec, support)
-        covered = _covered_indexes(parsed, spec, columns, support, options)
-        rows.append((candidate, spec, covered))
+        coverage = coverage_index.coverage_for_spec(spec)
+        rows.append((candidate, spec, coverage))
 
-    assigned_by_row = _assign_expanded_rows(parsed, rows, columns, support, options)
+    assigned_by_row = _assign_expanded_rows(parsed, rows, coverage_index)
+    _validate_expanded_solution(parsed, rows, assigned_by_row)
 
     rows.sort(
         key=lambda item: (
             equipment_count(item[1]),
-            -len(item[2]),
-            min(item[2]) if item[2] else len(parsed.rows),
+            -len(item[2].row_indexes),
+            min(item[2].row_indexes) if item[2].row_indexes else len(parsed.rows),
             _rendered_signature(item[1], output_requirement_columns),
         )
     )
@@ -49,12 +51,12 @@ def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, sol
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for spec_index, item in enumerate(rows, start=1):
-            _candidate, spec, covered = item
+            _candidate, spec, coverage = item
             assigned = assigned_by_row[id(item)]
             row = {
                 "spec_id": f"spec_{spec_index}",
-                "covered_tc_ids": _join_tc_ids(parsed, covered),
-                "covered_count": str(len(covered)),
+                "covered_tc_ids": _join_tc_ids(parsed, coverage.row_indexes),
+                "covered_count": str(len(coverage.row_indexes)),
                 "equipment_count": str(equipment_count(spec)),
                 "solve_status": solution.status,
             }
@@ -62,7 +64,7 @@ def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, sol
                 row["assigned_tc_ids"] = _join_tc_ids(parsed, assigned)
                 row["assigned_count"] = str(len(assigned))
             for column in output_requirement_columns:
-                if options.ignore_optional_columns and column not in columns:
+                if options.ignore_optional_columns and column not in coverage_index.columns:
                     row[column] = ""
                 else:
                     row[column] = render_tokens(spec.get(column, ()))
@@ -71,25 +73,51 @@ def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, sol
 
 def _assign_expanded_rows(
     parsed: ParsedCsv,
-    rows: list[tuple[Candidate, dict[str, tuple[Token, ...]], tuple[int, ...]]],
-    columns: tuple[str, ...],
-    support: SupportTable,
-    options: SolveOptions,
+    rows: list[tuple[Candidate, dict[str, tuple[Token, ...]], IndexedCoverage]],
+    coverage_index: CoverageIndex,
 ) -> dict[int, tuple[int, ...]]:
     assigned: dict[int, list[int]] = {id(item): [] for item in rows}
     for testcase_index, row in enumerate(parsed.rows):
+        group_index = coverage_index.row_to_group[testcase_index]
         choices = []
         for item in rows:
-            _candidate, spec, covered = item
-            if testcase_index not in covered:
+            _candidate, spec, coverage = item
+            if not coverage.group_mask & (1 << group_index):
                 continue
-            result = coverage_excess(row.tokens, spec, columns, support, options)
-            if result is not None:
-                choices.append((result.excess, equipment_count(spec), _rendered_signature(spec, columns), item))
+            choices.append(
+                (
+                    coverage.excess_by_group.get(group_index, 0),
+                    equipment_count(spec),
+                    _rendered_signature(spec, coverage_index.columns),
+                    item,
+                )
+            )
         if choices:
             item = min(choices, key=lambda choice: choice[:3])[3]
             assigned[id(item)].append(testcase_index)
     return {key: tuple(value) for key, value in assigned.items()}
+
+
+def _validate_expanded_solution(
+    parsed: ParsedCsv,
+    rows: list[tuple[Candidate, dict[str, tuple[Token, ...]], IndexedCoverage]],
+    assigned_by_row: dict[int, tuple[int, ...]],
+) -> None:
+    covered = set()
+    for _candidate, _spec, coverage in rows:
+        covered.update(coverage.row_indexes)
+    expected = set(range(len(parsed.rows)))
+    if covered != expected:
+        missing = sorted(expected - covered)
+        raise ValueError(f"expanded solution does not cover testcase indexes: {missing}")
+
+    assignment_counts = [0 for _ in parsed.rows]
+    for assigned in assigned_by_row.values():
+        for testcase_index in assigned:
+            assignment_counts[testcase_index] += 1
+    bad_indexes = [index for index, count in enumerate(assignment_counts) if count != 1]
+    if bad_indexes:
+        raise ValueError(f"expanded solution does not assign testcase indexes exactly once: {bad_indexes}")
 
 
 def _selected_ru_domain(tokens: tuple[Token, ...], support: SupportTable) -> set[str]:
