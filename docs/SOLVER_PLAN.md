@@ -95,6 +95,7 @@ requirements.
   - `--ru-band PATH`
   - `--ru-band-support PATH` as a legacy alias
   - `--parse-only`
+  - `--limit-rows N`
   - `--auto-assign`
   - `--ignore-optional-columns`
   - `--ignore-tech-and-ue-capa` as a legacy alias for `--ignore-optional-columns`
@@ -108,6 +109,8 @@ requirements.
   - `--max-numeric-overage-ratio FLOAT`
   - `--max-numeric-overage-units N`
   - `--reject-spec-side-wildcard COLUMN`, repeatable
+- CLI progress and elapsed-time messages are written to stderr so parse-only
+  JSON remains the only stdout payload.
 
 ## Test Plan
 

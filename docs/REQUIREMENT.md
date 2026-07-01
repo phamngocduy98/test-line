@@ -293,6 +293,11 @@ Output formatting rules:
 - `--parse-only` must still require `tc_id` in the testcase CSV and `ru`,
   `lte_band`, and `nr_band` in the RU-band support CSV, but it must not require
   final-solver-only fields such as testcase `ru`.
+- `--limit-rows N` limits processing to the first `N` testcase input rows after
+  parsing. It applies to both normal solving and `--parse-only`; `N` must be a
+  positive integer.
+- The CLI should print progress messages and final elapsed time to stderr so
+  stdout remains usable for `--parse-only` JSON output.
 
 ## Performance Requirements
 
