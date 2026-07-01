@@ -66,8 +66,7 @@ def read_testcase_csv(path: Path, *, require_ru: bool) -> ParsedCsv:
         for column in columns:
             if column == "tc_id":
                 continue
-            blank = () if column in NUMERIC_COLUMNS else (Token(("any",)),)
-            tokens[column] = parse_cell(raw[column], blank_tokens=blank)
+            tokens[column] = parse_cell(raw[column], blank_tokens=())
         parsed_rows.append(ParsedRow(row_number=row_number, raw=raw, tokens=tokens))
     return ParsedCsv(path=path, columns=columns, rows=tuple(parsed_rows))
 
@@ -112,4 +111,3 @@ def parsed_payload_to_json(input_csv: ParsedCsv, ru_band_csv: ParsedCsv) -> str:
 
 def render_tokens(tokens: Iterable[Token]) -> str:
     return " + ".join(token.as_text() for token in tokens)
-

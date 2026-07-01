@@ -16,8 +16,7 @@ requirements.
 ## Key Changes
 
 - Add a context-aware parser:
-  - Blank generic testcase requirement cells parse as `any`.
-  - Blank numeric equipment cells parse as no requirement.
+  - Blank testcase requirement cells parse as no requirement.
   - RU-band blank band cells parse as empty support lists.
   - Header names match exactly after BOM removal.
   - `tc_id` is validated and preserved, not treated as a requirement column.
@@ -112,10 +111,9 @@ requirements.
 
 ## Test Plan
 
-- Parser tests for BOM, exact header names, generic blank-as-any,
-  numeric blank-as-empty, support blank-as-empty, `+`, `/`, duplicate
-  alternatives, `null`, unknown columns, row order, column order, and `tokens`
-  excluding `tc_id`.
+- Parser tests for BOM, exact header names, testcase blank-as-empty, support
+  blank-as-empty, `+`, `/`, duplicate alternatives, explicit `any`, `null`,
+  unknown columns, row order, column order, and `tokens` excluding `tc_id`.
 - Validation tests for every rejection listed in `docs/REQUIREMENT.md`.
 - Validation tests for duplicate `tc_id`, support-table RU `/` alternatives, and
   invalid numeric equipment forms such as `1 + 2`, `1/2`, `any`, negative

@@ -176,7 +176,9 @@ def _relation_satisfied(token: Token, spec: tuple[Token, ...], column: str, supp
 
 def _ru_band_compatible(spec: dict[str, tuple[Token, ...]], support: SupportTable) -> bool:
     domains = _ru_domains(spec.get("ru", ()), support)
-    if not domains or any(not domain for domain in domains):
+    if not domains:
+        return not _has_band_requirements(spec)
+    if any(not domain for domain in domains):
         return False
     total = 1
     for domain in domains:
@@ -199,6 +201,10 @@ def _ru_band_covers(testcase: dict[str, tuple[Token, ...]], spec: dict[str, tupl
     if len(spec.get("ru", ())) < len(testcase.get("ru", ())):
         return False
     return _ru_band_compatible(spec, support)
+
+
+def _has_band_requirements(tokens_by_column: dict[str, tuple[Token, ...]]) -> bool:
+    return bool(tokens_by_column.get("lte band", ()) or tokens_by_column.get("nr band", ()))
 
 
 def _ru_domains(tokens: tuple[Token, ...], support: SupportTable) -> list[set[str]]:

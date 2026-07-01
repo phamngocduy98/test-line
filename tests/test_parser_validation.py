@@ -40,7 +40,7 @@ class ParserValidationTests(unittest.TestCase):
             self.assertEqual([2, 3], [row.row_number for row in testcase_csv.rows])
             self.assertNotIn("tc_id", testcase_csv.rows[0].tokens)
             self.assertEqual([["b1"], ["b2"]], [list(token.alternatives) for token in testcase_csv.rows[0].tokens["lte band"]])
-            self.assertEqual([["any"]], [list(token.alternatives) for token in testcase_csv.rows[0].tokens["unknown"]])
+            self.assertEqual([], [list(token.alternatives) for token in testcase_csv.rows[0].tokens["unknown"]])
             self.assertEqual([], [list(token.alternatives) for token in testcase_csv.rows[1].tokens["enb"]])
             self.assertEqual([["b1"]], [list(token.alternatives) for token in testcase_csv.rows[1].tokens["lte band"]])
             self.assertEqual([["a"], ["b"]], [list(token.alternatives) for token in testcase_csv.rows[1].tokens["unknown"]])
@@ -58,7 +58,30 @@ class ParserValidationTests(unittest.TestCase):
             support_csv = read_ru_band_csv(support_path)
             support = build_support_table(support_csv)
             validate_testcases(testcase_csv, support, final_solver=False)
-            self.assertEqual([["any"]], [list(token.alternatives) for token in testcase_csv.rows[0].tokens["lte band"]])
+            self.assertEqual([], [list(token.alternatives) for token in testcase_csv.rows[0].tokens["lte band"]])
+
+    def test_blank_cells_are_empty_but_explicit_any_and_zero_remain_tokens(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(
+                directory,
+                "input.csv",
+                "tc_id,tech nsa,lte band,nr band,ru,unknown\n"
+                "T1,0,,,any,\n"
+                "T2,any,any,any,any,0\n",
+            )
+            testcase_csv = read_testcase_csv(input_path, require_ru=True)
+            first = testcase_csv.rows[0].tokens
+            second = testcase_csv.rows[1].tokens
+            self.assertEqual([["0"]], [list(token.alternatives) for token in first["tech nsa"]])
+            self.assertEqual([], [list(token.alternatives) for token in first["lte band"]])
+            self.assertEqual([], [list(token.alternatives) for token in first["nr band"]])
+            self.assertEqual([["any"]], [list(token.alternatives) for token in first["ru"]])
+            self.assertEqual([], [list(token.alternatives) for token in first["unknown"]])
+            self.assertEqual([["any"]], [list(token.alternatives) for token in second["tech nsa"]])
+            self.assertEqual([["any"]], [list(token.alternatives) for token in second["lte band"]])
+            self.assertEqual([["any"]], [list(token.alternatives) for token in second["nr band"]])
+            self.assertEqual([["0"]], [list(token.alternatives) for token in second["unknown"]])
 
     def test_final_solver_requires_ru_and_testcase_rows(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -140,6 +163,43 @@ class ParserValidationTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(InputError, "no compatible RU-band realization"):
                 validate_testcases(testcase_csv, support, final_solver=True)
+
+    def test_blank_nr_band_means_no_requirement_for_line_627_shape(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            support = build_support_table(read_ru_band_csv(self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nrf1,b46,\n")))
+            testcase_csv = read_testcase_csv(
+                self.write(
+                    directory,
+                    "input.csv",
+                    "tc_id,tech lte,tech nsa,tech nr sa,enb,vdu,au,cu,lte band,nr band,ru,cc location,ca type,rf condition,ue,ue capa lte,ue capa nr,ue capa special\n"
+                    "626,1,0,0,1,0,0,0,b46,,any,any,any,any,0,any,,\n",
+                ),
+                require_ru=True,
+            )
+            validate_testcases(testcase_csv, support, final_solver=True)
+
+    def test_explicit_nr_any_still_requires_nr_support(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            support = build_support_table(read_ru_band_csv(self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nrf1,b46,\n")))
+            testcase_csv = read_testcase_csv(
+                self.write(directory, "input.csv", "tc_id,lte band,nr band,ru\n626,b46,any,any\n"),
+                require_ru=True,
+            )
+            with self.assertRaisesRegex(InputError, "no compatible RU-band realization"):
+                validate_testcases(testcase_csv, support, final_solver=True)
+
+    def test_blank_ru_requires_blank_bands(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            support = build_support_table(read_ru_band_csv(self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nrf1,b46,\n")))
+            no_bands = read_testcase_csv(self.write(directory, "no-bands.csv", "tc_id,lte band,nr band,ru\nA,,,\n"), require_ru=True)
+            validate_testcases(no_bands, support, final_solver=True)
+
+            with_band = read_testcase_csv(self.write(directory, "with-band.csv", "tc_id,lte band,nr band,ru\nA,b46,,\n"), require_ru=True)
+            with self.assertRaisesRegex(InputError, "no compatible RU-band realization"):
+                validate_testcases(with_band, support, final_solver=True)
 
 
 if __name__ == "__main__":

@@ -80,13 +80,13 @@ def _has_compatible_realization(tokens_by_column: dict[str, tuple[Token, ...]], 
         if not flat:
             return False
         ru_domains.append(flat)
-    if not ru_domains:
-        return False
 
     lte_options = _band_token_options(tokens_by_column.get("lte band", ()), support.lte_display)
     nr_options = _band_token_options(tokens_by_column.get("nr band", ()), support.nr_display)
     if lte_options is None or nr_options is None:
         return False
+    if not ru_domains:
+        return not lte_options and not nr_options
 
     max_products = 20000
     total = 1
@@ -124,4 +124,3 @@ def _band_token_options(tokens: tuple[Token, ...], display: dict[str, str]) -> l
 def _bands_supported(selected_rus: set[str], token_options: list[set[str]], support_by_ru: dict[str, tuple[str, ...]]) -> bool:
     supported = set().union(*(set(support_by_ru.get(ru, ())) for ru in selected_rus))
     return all(options & supported for options in token_options)
-

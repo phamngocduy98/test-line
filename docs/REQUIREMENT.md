@@ -130,8 +130,8 @@ alternative  := non-empty text after trimming whitespace
 
 Generic requirement cell rules:
 
-- In the testcase requirements CSV, a blank generic requirement cell means
-  `any`.
+- In the testcase requirements CSV, a blank requirement cell means no
+  requirement and parses to no tokens.
 - `+` separates required slots.
 - `/` separates alternatives within one slot.
 - Whitespace around `+` and `/` is ignored.
@@ -144,7 +144,7 @@ Column-specific blank rules:
 
 - In numeric equipment columns (`enb`, `vdu`, `au`, `cu`, and `ue`), a blank
   testcase cell means no capacity or equipment requirement and parses to no
-  tokens.
+  tokens, matching the generic testcase blank rule.
 - In numeric equipment columns, a non-blank testcase cell must be one
   non-negative base-10 integer token such as `0`, `1`, or `12`.
 - In RU-band support columns (`lte_band` and `nr_band`), a blank cell means no
@@ -154,7 +154,7 @@ Examples:
 
 | Raw cell | Parsed tokens |
 | --- | --- |
-| empty generic testcase cell | `[["any"]]` |
+| empty testcase requirement cell | `[]` |
 | empty numeric equipment testcase cell | `[]` |
 | empty RU-band support band cell | `[]` |
 | `b1 + b2` | `[["b1"], ["b2"]]` |
@@ -385,8 +385,8 @@ The program must reject invalid input with a clear error message when:
 - A non-empty requirement must be covered by distinct compatible spec slots.
 - Two slots are compatible when either side is `any`.
 - Two slots are compatible when their alternatives intersect case-insensitively.
-- Blank generic testcase requirement cells are parsed as `any` and must be
-  covered as wildcard slots. Blank numeric equipment cells mean no requirement.
+- Blank testcase requirement cells parse to no tokens and mean no requirement.
+  Explicit `any` tokens must be covered as wildcard slots.
 - A covering non-numeric spec should not have more than one extra slot beyond
   the testcase requirement by default.
 - A spec must have at least as many `ru` slots as the testcase requires. For
@@ -545,8 +545,8 @@ Other requirement columns do not affect equipment count.
 
 - The program can parse `input.csv` and `ru-band.csv` without losing column
   order, row order, raw values, or token alternatives.
-- The parser produces predictable tokens for blank generic requirement cells,
-  blank numeric equipment cells, `+`, `/`, `any`, and duplicate alternatives.
+- The parser produces predictable tokens for blank requirement cells, `+`, `/`,
+  explicit `any`, and duplicate alternatives.
 - The final solver output covers every testcase.
 - The final solver output contains only RU-band compatible specs.
 - The final solver does not select a single broad "catch-all" spec when a

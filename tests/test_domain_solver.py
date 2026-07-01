@@ -51,6 +51,21 @@ class DomainSolverTests(unittest.TestCase):
             self.assertIsNotNone(coverage_excess(parsed.rows[0].tokens, one_ru_spec, columns, support, options))
             self.assertIsNone(coverage_excess(parsed.rows[1].tokens, one_ru_spec, columns, support, options))
 
+    def test_no_ru_spec_is_valid_only_without_band_requirements(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band,nr band,cc location\nT1,,,,A\nT2,any,b1,,A\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            options = SolveOptions()
+            columns = active_requirement_columns(parsed.columns, options)
+            no_ru_spec = {"ru": (), "lte band": (), "nr band": (), "cc location": (Token(("A",)),)}
+            band_spec_without_ru = {"ru": (), "lte band": (Token(("b1",)),), "nr band": (), "cc location": (Token(("A",)),)}
+            self.assertIsNotNone(coverage_excess(parsed.rows[0].tokens, no_ru_spec, columns, support, options))
+            self.assertIsNone(coverage_excess(parsed.rows[1].tokens, no_ru_spec, columns, support, options))
+            self.assertIsNone(coverage_excess(parsed.rows[1].tokens, band_spec_without_ru, columns, support, options))
+
     def test_band_relationship_tokens(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
@@ -173,6 +188,23 @@ class DomainSolverTests(unittest.TestCase):
                 row = next(csv.DictReader(handle))
             self.assertIn("tech lte", row)
             self.assertEqual("", row["tech lte"])
+
+    def test_blank_requirements_render_blank_in_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band,nr band,cc location\nT1,,,,A\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            output = directory / "output.csv"
+            solve_to_csv(parsed, support, output, SolveOptions())
+            with output.open(newline="", encoding="utf-8") as handle:
+                row = next(csv.DictReader(handle))
+            self.assertEqual("", row["ru"])
+            self.assertEqual("", row["lte band"])
+            self.assertEqual("", row["nr band"])
+            self.assertEqual("A", row["cc location"])
 
 
 if __name__ == "__main__":
