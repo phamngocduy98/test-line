@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .coverage import active_requirement_columns, equipment_count
 from .constants import NUMERIC_COLUMNS
+from .expansion import expanded_spec
 from .indexing import CoverageIndex
 from .merge import exact_spec, merge_specs, spec_signature
 from .models import Candidate, ParsedCsv, SolveOptions, SupportTable, Token
@@ -76,7 +77,7 @@ def _add_candidate(
     signature = spec_signature(spec, columns)
     if signature in seen:
         return False
-    indexed = coverage_index.coverage_for_spec(spec)
+    indexed = coverage_index.coverage_for_spec(expanded_spec(spec, coverage_index.support))
     if not indexed.row_indexes:
         return False
     excess: dict[int, int] = {}
