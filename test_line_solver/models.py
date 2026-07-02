@@ -42,6 +42,7 @@ class SolveOptions:
     auto_assign: bool = False
     timeout_seconds: float = 600.0
     solver: str = "auto"
+    solver_threads: int | None = None
     max_candidates: int = 20000
     max_candidates_per_bucket: int = 250
     max_merge_width: int = 55

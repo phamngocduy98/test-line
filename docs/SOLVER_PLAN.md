@@ -82,8 +82,9 @@ requirements.
 - Compute `covered_tc_ids` and `assigned_tc_ids` against the final emitted spec
   domains after RU/band wildcard expansion, so output never claims coverage that
   the rendered spec cannot actually provide.
-- Use a standard-library branch-and-bound solver as the required backend.
-  Optional OR-Tools support may be added behind `--solver auto|stdlib|ortools`.
+- Use OR-Tools CP-SAT as the preferred `auto` backend when installed, with the
+  standard-library branch-and-bound solver kept behind `--solver stdlib` and as
+  an `auto` fallback when OR-Tools is unavailable.
 
 ## Public Interfaces
 
@@ -101,6 +102,7 @@ requirements.
   - `--ignore-tech-and-ue-capa` as a legacy alias for `--ignore-optional-columns`
   - `--timeout SECONDS`
   - `--solver auto|stdlib|ortools`
+  - `--solver-threads N`
   - `--max-candidates N`, default `20000`
   - `--max-candidates-per-bucket N`, default `250`
   - `--max-merge-width N`, default `55`

@@ -48,6 +48,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument("--solver", choices=("auto", "stdlib", "ortools"), default="auto")
+    parser.add_argument("--solver-threads", type=int, help="Worker threads for solver backends that support parallel search")
     parser.add_argument("--max-candidates", type=int, default=DEFAULT_MAX_CANDIDATES)
     parser.add_argument("--max-candidates-per-bucket", type=int, default=DEFAULT_MAX_CANDIDATES_PER_BUCKET)
     parser.add_argument("--max-merge-width", type=int, default=DEFAULT_MAX_MERGE_WIDTH)
@@ -72,11 +73,14 @@ def progress(message: str) -> None:
 
 
 def options_from_args(args: argparse.Namespace) -> SolveOptions:
+    if args.solver_threads is not None and args.solver_threads < 1:
+        raise InputError("--solver-threads must be a positive integer")
     return SolveOptions(
         ignore_optional_columns=args.ignore_optional_columns,
         auto_assign=args.auto_assign,
         timeout_seconds=args.timeout,
         solver=args.solver,
+        solver_threads=args.solver_threads,
         max_candidates=args.max_candidates,
         max_candidates_per_bucket=args.max_candidates_per_bucket,
         max_merge_width=args.max_merge_width,
