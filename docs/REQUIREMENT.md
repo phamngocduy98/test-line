@@ -309,8 +309,24 @@ Output formatting rules:
 - `--min-assigned-cases-per-spec N` treats selected specs with fewer than `N`
   assigned testcases as low-use. The default is `10`; `0` disables low-use
   analysis and refinement.
+- `--low-use-refinement-timeout SECONDS` gives the low-use refinement pass a
+  dedicated positive timeout after the primary solver returns. When omitted,
+  refinement uses the remaining `--timeout` budget.
+- `--refine-output PATH` skips the primary optimizer, imports selected specs
+  from an existing output CSV, regenerates candidates from the current input and
+  RU-band support, runs only low-use refinement, and writes a new output CSV.
+  It cannot be used with `--parse-only` or with low-use refinement disabled.
 - The CLI should print progress messages and final elapsed time to stderr so
   stdout remains usable for `--parse-only` JSON output.
+
+In `--refine-output` mode, imported output metadata such as `spec_id`,
+`covered_tc_ids`, `covered_count`, `equipment_count`, `solve_status`,
+`assigned_tc_ids`, and `assigned_count` must not be trusted. Coverage,
+assignment, equipment, and status are recomputed from the current input,
+support table, and options. The imported output must contain all current input
+requirement columns except `tc_id`; unknown extra columns, malformed cells,
+duplicate imported specs, incompatible specs, zero-coverage specs, and specs
+that do not cover every current testcase must be rejected.
 
 ## Performance Requirements
 
@@ -341,6 +357,13 @@ Default performance behavior:
   candidate when avoidable.
 - When the timeout is reached after a complete valid solution is found, output
   that solution with `solve_status` set to `FEASIBLE_TIMEOUT`.
+- OR-Tools `FEASIBLE` results mean the generated-candidate optimum was not
+  proven and must be reported as `FEASIBLE_TIMEOUT`; plain `FEASIBLE` is not a
+  public output status.
+- When `--low-use-refinement-timeout` is set, the low-use refinement pass must
+  still run for up to that dedicated budget after a primary `FEASIBLE_TIMEOUT`
+  result. The final status remains `FEASIBLE_TIMEOUT` if the primary solver
+  timed out or if refinement does not complete.
 - When low-use analysis is enabled and completes without changing the primary
   solution, output that solution with `solve_status` set to
   `FEASIBLE_LOW_USE_CHECKED`.

@@ -69,10 +69,10 @@ def optimize(
     status = solver.Solve(parts.model)
     if status in (cp_model.OPTIMAL, cp_model.FEASIBLE):
         selected_indexes = tuple(index for index, variable in enumerate(parts.selected) if solver.BooleanValue(variable))
-        status_name = "OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE"
+        status_name = "OPTIMAL" if status == cp_model.OPTIMAL else "FEASIBLE_TIMEOUT"
     else:
         selected_indexes = greedy_indexes
-        status_name = "FEASIBLE"
+        status_name = "FEASIBLE_TIMEOUT"
 
     if status == cp_model.OPTIMAL:
         objective_fields = _objective_fields(indexed, selected_indexes, weights)
@@ -86,7 +86,7 @@ def optimize(
             solver_threads,
         )
         if refined is None:
-            status_name = "FEASIBLE"
+            status_name = "FEASIBLE_TIMEOUT"
         else:
             selected_indexes = refined
 

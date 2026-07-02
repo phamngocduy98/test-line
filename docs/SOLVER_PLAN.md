@@ -89,12 +89,22 @@ requirements.
   replace low-use specs only when complete coverage, total equipment, and final
   assignment excess are not worsened. The pass uses the remaining `--timeout`
   budget and reports `FEASIBLE_TIMEOUT` if it cannot complete low-use checking.
+- Add `--low-use-refinement-timeout` so low-use refinement can receive a
+  dedicated post-solve budget. When set, refinement still runs after a primary
+  `FEASIBLE_TIMEOUT`; the final status remains `FEASIBLE_TIMEOUT` if the
+  primary solver timed out or refinement itself times out.
+- Add `--refine-output` as a refinement-only mode. It imports selected specs
+  from an existing output CSV, ignores old output metadata, rebuilds
+  coverage/assignment from the current input and RU-band support, regenerates
+  candidates, runs only low-use refinement, and writes a new output CSV.
 - Use `FEASIBLE_LOW_USE_CHECKED` when low-use analysis completes without a
   change, and `FEASIBLE_LOW_USE_REFINED` when the bounded refinement changes the
   selected specs.
 - Use OR-Tools CP-SAT as the preferred `auto` backend when installed, with the
   standard-library branch-and-bound solver kept behind `--solver stdlib` and as
-  an `auto` fallback when OR-Tools is unavailable.
+  an `auto` fallback when OR-Tools is unavailable. Report OR-Tools
+  feasible-but-not-proven results as `FEASIBLE_TIMEOUT`, not as a public
+  `FEASIBLE` status.
 
 ## Public Interfaces
 
@@ -111,6 +121,8 @@ requirements.
   - `--ignore-optional-columns`
   - `--ignore-tech-and-ue-capa` as a legacy alias for `--ignore-optional-columns`
   - `--timeout SECONDS`
+  - `--low-use-refinement-timeout SECONDS`
+  - `--refine-output PATH`
   - `--solver auto|stdlib|ortools`
   - `--solver-threads N`
   - `--max-candidates N`, default `20000`
@@ -156,6 +168,11 @@ requirements.
   `--min-assigned-cases-per-spec 0`, and are refined only when equipment and
   assignment excess do not get worse. Include status tests for checked, refined,
   disabled, and timeout cases.
+- Tests proving a primary `FEASIBLE_TIMEOUT` does not starve refinement when
+  `--low-use-refinement-timeout` is set.
+- Refinement-only tests proving imported output metadata is ignored, current
+  input coverage is recomputed, stale or malformed output is rejected, and
+  low-use specs can be checked or refined without running the primary optimizer.
 - Performance tests with synthetic 3000-row fixtures verifying a valid solution
   is produced within a bounded timeout and reports `FEASIBLE_TIMEOUT` when
   proof of optimality is not completed.

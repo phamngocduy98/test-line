@@ -277,7 +277,7 @@ class CoverageIndexTests(unittest.TestCase):
         solution = optimize_ortools(candidates, 11, 10.0, solver_threads=1)
         self.assertEqual(("light-group-excess",), tuple(candidate.signature for candidate in solution.candidates))
 
-    def test_ortools_optimizer_returns_greedy_feasible_when_time_expires(self):
+    def test_ortools_optimizer_returns_feasible_timeout_when_time_expires(self):
         try:
             from test_line_solver.ortools_optimizer import optimize as optimize_ortools
             import ortools  # noqa: F401
@@ -290,7 +290,7 @@ class CoverageIndexTests(unittest.TestCase):
             Candidate("ab", {}, (0, 1), 3, frozenset({0, 1}), {0: 1, 1: 1}),
         )
         solution = optimize_ortools(candidates, 2, 0.0, solver_threads=1)
-        self.assertEqual("FEASIBLE", solution.status)
+        self.assertEqual("FEASIBLE_TIMEOUT", solution.status)
         self.assertEqual({0, 1}, set(solution.assignments))
 
 def _bruteforce_objective(candidates: tuple[Candidate, ...], testcase_count: int):

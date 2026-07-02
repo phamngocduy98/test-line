@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from test_line_solver.cli import run
-from test_line_solver.models import Solution
+from test_line_solver.models import Candidate, Solution, Token
 
 
 class CliTests(unittest.TestCase):
@@ -91,7 +91,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(0, code)
             with output_path.open(newline="", encoding="utf-8") as handle:
                 row = next(csv.DictReader(handle))
-            self.assertIn(row["solve_status"], {"OPTIMAL", "FEASIBLE"})
+            self.assertIn(row["solve_status"], {"OPTIMAL", "FEASIBLE_TIMEOUT"})
 
     def test_solver_threads_must_be_positive(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -115,6 +115,59 @@ class CliTests(unittest.TestCase):
                 code = run(["--input", str(input_path), "--ru-band", str(support_path), "--min-assigned-cases-per-spec", "-1"])
             self.assertEqual(2, code)
             self.assertIn("--min-assigned-cases-per-spec must be zero or a positive integer", stderr.getvalue())
+
+    def test_low_use_refinement_timeout_must_be_positive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(["--input", str(input_path), "--ru-band", str(support_path), "--low-use-refinement-timeout", "0"])
+            self.assertEqual(2, code)
+            self.assertIn("--low-use-refinement-timeout must be positive", stderr.getvalue())
+
+    def test_refine_output_rejects_parse_only_and_disabled_low_use(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            previous_path = self.write(directory, "previous.csv", "spec_id,ru,lte band\nspec_1,RU1,b1\n")
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(["--input", str(input_path), "--ru-band", str(support_path), "--refine-output", str(previous_path), "--parse-only"])
+            self.assertEqual(2, code)
+            self.assertIn("--refine-output cannot be used with --parse-only", stderr.getvalue())
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--ru-band",
+                        str(support_path),
+                        "--refine-output",
+                        str(previous_path),
+                        "--min-assigned-cases-per-spec",
+                        "0",
+                    ]
+                )
+            self.assertEqual(2, code)
+            self.assertIn("--refine-output requires --min-assigned-cases-per-spec greater than zero", stderr.getvalue())
+
+    def test_refine_output_rejects_unexpected_columns(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,RU1\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            previous_path = self.write(directory, "previous.csv", "spec_id,ru,lte band,extra\nspec_1,RU1,b1,nope\n")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(["--input", str(input_path), "--ru-band", str(support_path), "--refine-output", str(previous_path)])
+            self.assertEqual(2, code)
+            self.assertIn("unexpected output column", stderr.getvalue())
 
     def test_low_use_summary_can_be_disabled(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -174,6 +227,42 @@ class CliTests(unittest.TestCase):
                         code = run(["--input", str(input_path), "--ru-band", str(support_path), "--output", str(output_path)])
             self.assertEqual(0, code)
             self.assertTrue(ortools_optimize.called)
+
+    def test_ortools_feasible_timeout_status_survives_low_use_refinement(self):
+        try:
+            import ortools  # noqa: F401
+        except ImportError:
+            self.skipTest("OR-Tools is not installed")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,RU1\nT2,b1,RU1\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            output_path = directory / "output.csv"
+
+            with patch("test_line_solver.ortools_optimizer.optimize", side_effect=_duplicated_feasible_timeout_solution):
+                with redirect_stderr(io.StringIO()):
+                    code = run(
+                        [
+                            "--input",
+                            str(input_path),
+                            "--ru-band",
+                            str(support_path),
+                            "--output",
+                            str(output_path),
+                            "--solver",
+                            "ortools",
+                            "--low-use-refinement-timeout",
+                            "1",
+                            "--min-assigned-cases-per-spec",
+                            "2",
+                        ]
+                    )
+            self.assertEqual(0, code)
+            with output_path.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(1, len(rows))
+            self.assertEqual("FEASIBLE_TIMEOUT", rows[0]["solve_status"])
 
     def test_auto_solver_falls_back_only_when_ortools_is_unavailable(self):
         try:
@@ -295,6 +384,22 @@ class CliTests(unittest.TestCase):
 def _first_candidate_solution(candidates, testcase_count, *args, **kwargs):
     candidate = candidates[0]
     return Solution((candidate,), {index: candidate for index in range(testcase_count)}, "OPTIMAL")
+
+
+def _duplicated_feasible_timeout_solution(candidates, testcase_count, *args, **kwargs):
+    primary = candidates[0]
+    duplicate = Candidate(
+        "manual-broader",
+        {"ru": (Token(("RU1",)),), "lte band": (Token(("any",)),)},
+        (),
+        primary.equipment_count,
+        primary.coverage,
+        primary.assignment_excess,
+        primary.group_coverage_mask,
+        primary.group_assignment_excess,
+        primary.group_weights,
+    )
+    return Solution((primary, duplicate), {index: primary for index in range(testcase_count)}, "FEASIBLE_TIMEOUT")
 
 
 if __name__ == "__main__":

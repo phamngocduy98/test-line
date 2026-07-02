@@ -41,6 +41,7 @@ class SolveOptions:
     ignore_optional_columns: bool = False
     auto_assign: bool = False
     timeout_seconds: float = 600.0
+    low_use_refinement_timeout_seconds: float | None = None
     solver: str = "auto"
     solver_threads: int | None = None
     max_candidates: int = 20000

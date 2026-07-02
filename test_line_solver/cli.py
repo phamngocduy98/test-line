@@ -38,6 +38,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Path to RU-band support CSV. Default: ru-band.csv",
     )
     parser.add_argument("--parse-only", action="store_true", help="Print parsed JSON and exit without solving")
+    parser.add_argument("--refine-output", help="Start from an existing output CSV and run only low-use refinement")
     parser.add_argument("--limit-rows", type=int, help="Only process the first N testcase input rows")
     parser.add_argument("--auto-assign", action="store_true", help="Write assigned testcase columns in output")
     parser.add_argument("--ignore-optional-columns", action="store_true", help="Ignore optional technology and UE capability columns")
@@ -48,6 +49,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="Legacy alias for --ignore-optional-columns",
     )
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_SECONDS)
+    parser.add_argument("--low-use-refinement-timeout", type=float, help="Dedicated low-use refinement timeout in seconds")
     parser.add_argument("--solver", choices=("auto", "stdlib", "ortools"), default="auto")
     parser.add_argument("--solver-threads", type=int, help="Worker threads for solver backends that support parallel search")
     parser.add_argument("--max-candidates", type=int, default=DEFAULT_MAX_CANDIDATES)
@@ -84,10 +86,17 @@ def options_from_args(args: argparse.Namespace) -> SolveOptions:
         raise InputError("--solver-threads must be a positive integer")
     if args.min_assigned_cases_per_spec < 0:
         raise InputError("--min-assigned-cases-per-spec must be zero or a positive integer")
+    if args.low_use_refinement_timeout is not None and args.low_use_refinement_timeout <= 0:
+        raise InputError("--low-use-refinement-timeout must be positive")
+    if args.refine_output and args.parse_only:
+        raise InputError("--refine-output cannot be used with --parse-only")
+    if args.refine_output and args.min_assigned_cases_per_spec <= 0:
+        raise InputError("--refine-output requires --min-assigned-cases-per-spec greater than zero")
     return SolveOptions(
         ignore_optional_columns=args.ignore_optional_columns,
         auto_assign=args.auto_assign,
         timeout_seconds=args.timeout,
+        low_use_refinement_timeout_seconds=args.low_use_refinement_timeout,
         solver=args.solver,
         solver_threads=args.solver_threads,
         max_candidates=args.max_candidates,
@@ -106,6 +115,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     start = time.perf_counter()
     try:
+        options = options_from_args(args)
         progress(f"Reading testcase CSV: {args.input}")
         testcase_csv = read_testcase_csv(Path(args.input), require_ru=not args.parse_only)
         original_rows = len(testcase_csv.rows)
@@ -127,10 +137,14 @@ def run(argv: Sequence[str] | None = None) -> int:
         progress("Validating testcase compatibility")
         validate_testcases(testcase_csv, support, final_solver=True)
 
-        from .solver import solve_to_csv
+        from .solver import refine_output_to_csv, solve_to_csv
 
-        progress("Solving selected test-line specs")
-        solve_to_csv(testcase_csv, support, Path(args.output), options_from_args(args))
+        if args.refine_output:
+            progress(f"Refining existing output CSV: {args.refine_output}")
+            refine_output_to_csv(testcase_csv, support, Path(args.refine_output), Path(args.output), options)
+        else:
+            progress("Solving selected test-line specs")
+            solve_to_csv(testcase_csv, support, Path(args.output), options)
         progress(f"Wrote output CSV: {args.output}")
         progress(f"Completed in {time.perf_counter() - start:.3f}s")
         return 0

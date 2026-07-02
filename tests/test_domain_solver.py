@@ -4,6 +4,7 @@ import csv
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from test_line_solver.candidates import generate_candidates
 from test_line_solver.coverage import active_requirement_columns, coverage_excess
@@ -321,6 +322,73 @@ class DomainSolverTests(unittest.TestCase):
             self.assertFalse(refinement.completed)
             self.assertFalse(refinement.changed)
             self.assertEqual("FEASIBLE_TIMEOUT", _solution_with_low_use_status(refinement, options).status)
+
+    def test_dedicated_low_use_timeout_refines_after_primary_timeout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band\nT1,RU1,b1\nT2,RU1,b1\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+
+            def timed_out_solution(candidates, testcase_count, timeout_seconds):
+                primary = candidates[0]
+                duplicate = Candidate(
+                    "manual-broader",
+                    {"ru": (Token(("RU1",)),), "lte band": (Token(("any",)),)},
+                    (),
+                    primary.equipment_count,
+                    primary.coverage,
+                    primary.assignment_excess,
+                    primary.group_coverage_mask,
+                    primary.group_assignment_excess,
+                    primary.group_weights,
+                )
+                return Solution((primary, duplicate), {index: primary for index in range(testcase_count)}, "FEASIBLE_TIMEOUT")
+
+            output = directory / "output.csv"
+            options = SolveOptions(
+                solver="stdlib",
+                timeout_seconds=0.0,
+                low_use_refinement_timeout_seconds=1.0,
+                min_assigned_cases_per_spec=2,
+            )
+            with patch("test_line_solver.optimizer.optimize", side_effect=timed_out_solution):
+                solve_to_csv(parsed, support, output, options)
+
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(1, len(rows))
+            self.assertEqual("FEASIBLE_TIMEOUT", rows[0]["solve_status"])
+
+    def test_refine_output_mode_removes_low_use_imported_spec(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band\nT1,RU1,b1\nT2,RU1,b1\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            previous = directory / "previous.csv"
+            previous.write_text(
+                "spec_id,covered_tc_ids,covered_count,equipment_count,solve_status,ru,lte band\n"
+                "spec_1,wrong,999,999,FEASIBLE_TIMEOUT,RU1,b1\n"
+                "spec_2,wrong,999,999,FEASIBLE_TIMEOUT,RU1,any\n",
+                encoding="utf-8",
+            )
+
+            output = directory / "refined.csv"
+            options = SolveOptions(low_use_refinement_timeout_seconds=1.0, min_assigned_cases_per_spec=2)
+            from test_line_solver.solver import refine_output_to_csv
+
+            refine_output_to_csv(parsed, support, previous, output, options)
+
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertEqual(1, len(rows))
+            self.assertEqual("FEASIBLE_LOW_USE_REFINED", rows[0]["solve_status"])
+            self.assertEqual("T1 + T2", rows[0]["covered_tc_ids"])
 
 
 if __name__ == "__main__":
