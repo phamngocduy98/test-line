@@ -73,6 +73,8 @@ requirements.
   - Satisfy guardrails.
   - Minimize total equipment count.
   - Minimize total assignment excess.
+  - Minimize low-use selected specs and low-use deficit when doing so does not
+    worsen equipment or assignment excess.
   - Minimize selected spec count.
   - Use deterministic tie-breaks.
 - Model assignment during optimization. Every testcase is assigned to exactly one
@@ -82,6 +84,14 @@ requirements.
 - Compute `covered_tc_ids` and `assigned_tc_ids` against the final emitted spec
   domains after RU/band wildcard expansion, so output never claims coverage that
   the rendered spec cannot actually provide.
+- Share final expanded assignment evaluation between output and low-use
+  analysis. Run a bounded post-solve low-use refinement pass that may remove or
+  replace low-use specs only when complete coverage, total equipment, and final
+  assignment excess are not worsened. The pass uses the remaining `--timeout`
+  budget and reports `FEASIBLE_TIMEOUT` if it cannot complete low-use checking.
+- Use `FEASIBLE_LOW_USE_CHECKED` when low-use analysis completes without a
+  change, and `FEASIBLE_LOW_USE_REFINED` when the bounded refinement changes the
+  selected specs.
 - Use OR-Tools CP-SAT as the preferred `auto` backend when installed, with the
   standard-library branch-and-bound solver kept behind `--solver stdlib` and as
   an `auto` fallback when OR-Tools is unavailable.
@@ -111,6 +121,8 @@ requirements.
   - `--max-numeric-overage-ratio FLOAT`
   - `--max-numeric-overage-units N`
   - `--reject-spec-side-wildcard COLUMN`, repeatable
+  - `--min-assigned-cases-per-spec N`, default `10`; `0` disables low-use
+    analysis and refinement
 - CLI progress and elapsed-time messages are written to stderr so parse-only
   JSON remains the only stdout payload.
 
@@ -140,6 +152,10 @@ requirements.
   merged candidates are pruned or penalized by guardrails.
 - Solver tests proving a broad catch-all candidate loses to focused specs when
   it has greater equipment or assignment excess.
+- Solver tests proving low-use specs are reported, can be disabled with
+  `--min-assigned-cases-per-spec 0`, and are refined only when equipment and
+  assignment excess do not get worse. Include status tests for checked, refined,
+  disabled, and timeout cases.
 - Performance tests with synthetic 3000-row fixtures verifying a valid solution
   is produced within a bounded timeout and reports `FEASIBLE_TIMEOUT` when
   proof of optimality is not completed.

@@ -7,12 +7,14 @@ from pathlib import Path
 
 from test_line_solver.candidates import generate_candidates
 from test_line_solver.coverage import active_requirement_columns, coverage_excess
+from test_line_solver.evaluation import SolutionEvaluator
 from test_line_solver.merge import merge_specs
 from test_line_solver.models import Candidate, Solution, SolveOptions, Token
 from test_line_solver.output import write_solution_csv
 from test_line_solver.optimizer import optimize
 from test_line_solver.parsing import read_ru_band_csv, read_testcase_csv
 from test_line_solver.solver import solve_to_csv
+from test_line_solver.solver import _refine_low_use_specs, _solution_with_low_use_status
 from test_line_solver.support import build_support_table
 from test_line_solver.validation import validate_testcases
 
@@ -150,7 +152,7 @@ class DomainSolverTests(unittest.TestCase):
                 "ru,lte_band,nr_band\nRU1,b1,\nRU2,b2,\n",
             )
             output = directory / "output.csv"
-            solve_to_csv(parsed, support, output, SolveOptions(auto_assign=True, max_merge_width=5))
+            solve_to_csv(parsed, support, output, SolveOptions(auto_assign=True, max_merge_width=5, min_assigned_cases_per_spec=0))
             with output.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertTrue(rows)
@@ -273,6 +275,52 @@ class DomainSolverTests(unittest.TestCase):
             )
             with self.assertRaisesRegex(ValueError, "expanded solution does not cover"):
                 write_solution_csv(directory / "output.csv", parsed, support, Solution((candidate,), {0: candidate}, "OPTIMAL"), SolveOptions())
+
+    def test_low_use_refinement_removes_unassigned_redundant_spec(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band\nT1,RU1,b1\nT2,RU1,b1\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            spec = {"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),)}
+            first = Candidate("a", spec, (0,), 1, frozenset({0, 1}), {0: 0, 1: 0})
+            duplicate = Candidate("a-copy", spec, (1,), 1, frozenset({0, 1}), {0: 0, 1: 0})
+            options = SolveOptions(min_assigned_cases_per_spec=2)
+            refinement = _refine_low_use_specs(
+                (first, duplicate),
+                Solution((first, duplicate), {0: first, 1: first}, "OPTIMAL"),
+                SolutionEvaluator(parsed, support, options),
+                options,
+            )
+            refined = refinement.solution
+            self.assertTrue(refinement.completed)
+            self.assertTrue(refinement.changed)
+            self.assertEqual(1, len(refined.candidates))
+            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
+            self.assertEqual(0, refinement.evaluation.total_assignment_excess)
+            self.assertEqual("FEASIBLE_LOW_USE_REFINED", _solution_with_low_use_status(refinement, options).status)
+
+    def test_low_use_refinement_stops_when_deadline_is_exhausted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band\nT1,RU1,b1\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            spec = {"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),)}
+            candidate = Candidate("a", spec, (0,), 1, frozenset({0}), {0: 0})
+            options = SolveOptions(min_assigned_cases_per_spec=10)
+            refinement = _refine_low_use_specs(
+                (candidate,),
+                Solution((candidate,), {0: candidate}, "OPTIMAL"),
+                SolutionEvaluator(parsed, support, options),
+                options,
+                deadline=0.0,
+            )
+            self.assertFalse(refinement.completed)
+            self.assertFalse(refinement.changed)
+            self.assertEqual("FEASIBLE_TIMEOUT", _solution_with_low_use_status(refinement, options).status)
 
 
 if __name__ == "__main__":

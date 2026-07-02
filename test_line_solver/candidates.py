@@ -77,9 +77,24 @@ def _add_candidate(
     signature = spec_signature(spec, columns)
     if signature in seen:
         return False
+    candidate = candidate_from_spec(spec, source_indexes, coverage_index)
+    if candidate is None:
+        return False
+    seen.add(signature)
+    candidates.append(candidate)
+    return True
+
+
+def candidate_from_spec(
+    spec: dict[str, tuple[Token, ...]],
+    source_indexes: tuple[int, ...],
+    coverage_index: CoverageIndex,
+) -> Candidate | None:
+    columns = coverage_index.columns
+    signature = spec_signature(spec, columns)
     indexed = coverage_index.coverage_for_spec(expanded_spec(spec, coverage_index.support))
     if not indexed.row_indexes:
-        return False
+        return None
     excess: dict[int, int] = {}
     for group_index, group in enumerate(coverage_index.groups):
         if not indexed.group_mask & (1 << group_index):
@@ -87,21 +102,17 @@ def _add_candidate(
         group_excess = indexed.excess_by_group.get(group_index, 0)
         for row_index in group.row_indexes:
             excess[row_index] = group_excess
-    seen.add(signature)
-    candidates.append(
-        Candidate(
-            signature=signature,
-            spec=spec,
-            source_indexes=source_indexes,
-            equipment_count=equipment_count(spec),
-            coverage=frozenset(indexed.row_indexes),
-            assignment_excess=excess,
-            group_coverage_mask=indexed.group_mask,
-            group_assignment_excess=indexed.excess_by_group,
-            group_weights=tuple(group.weight for group in coverage_index.groups),
-        )
+    return Candidate(
+        signature=signature,
+        spec=spec,
+        source_indexes=source_indexes,
+        equipment_count=equipment_count(spec),
+        coverage=frozenset(indexed.row_indexes),
+        assignment_excess=excess,
+        group_coverage_mask=indexed.group_mask,
+        group_assignment_excess=indexed.excess_by_group,
+        group_weights=tuple(group.weight for group in coverage_index.groups),
     )
-    return True
 
 
 def _bucket_key(

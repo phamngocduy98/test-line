@@ -16,6 +16,7 @@ from .constants import (
     DEFAULT_MAX_MERGE_WIDTH,
     DEFAULT_MAX_NUMERIC_OVERAGE_RATIO,
     DEFAULT_MAX_NUMERIC_OVERAGE_UNITS,
+    DEFAULT_MIN_ASSIGNED_CASES_PER_SPEC,
     DEFAULT_TIMEOUT_SECONDS,
 )
 from .errors import InputError
@@ -57,6 +58,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--max-numeric-overage-ratio", type=float, default=DEFAULT_MAX_NUMERIC_OVERAGE_RATIO)
     parser.add_argument("--max-numeric-overage-units", type=int, default=DEFAULT_MAX_NUMERIC_OVERAGE_UNITS)
     parser.add_argument("--reject-spec-side-wildcard", action="append", default=[])
+    parser.add_argument(
+        "--min-assigned-cases-per-spec",
+        type=int,
+        default=DEFAULT_MIN_ASSIGNED_CASES_PER_SPEC,
+        help="Treat selected specs with fewer than N assigned testcases as low-use. Use 0 to disable.",
+    )
     return parser.parse_args(argv)
 
 
@@ -75,6 +82,8 @@ def progress(message: str) -> None:
 def options_from_args(args: argparse.Namespace) -> SolveOptions:
     if args.solver_threads is not None and args.solver_threads < 1:
         raise InputError("--solver-threads must be a positive integer")
+    if args.min_assigned_cases_per_spec < 0:
+        raise InputError("--min-assigned-cases-per-spec must be zero or a positive integer")
     return SolveOptions(
         ignore_optional_columns=args.ignore_optional_columns,
         auto_assign=args.auto_assign,
@@ -89,6 +98,7 @@ def options_from_args(args: argparse.Namespace) -> SolveOptions:
         max_numeric_overage_ratio=args.max_numeric_overage_ratio,
         max_numeric_overage_units=args.max_numeric_overage_units,
         reject_spec_side_wildcard=tuple(args.reject_spec_side_wildcard),
+        min_assigned_cases_per_spec=args.min_assigned_cases_per_spec,
     )
 
 

@@ -51,6 +51,7 @@ class SolveOptions:
     max_numeric_overage_ratio: float = 2.0
     max_numeric_overage_units: int = 1
     reject_spec_side_wildcard: tuple[str, ...] = ()
+    min_assigned_cases_per_spec: int = 10
 
 
 @dataclass(frozen=True)

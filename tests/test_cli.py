@@ -105,6 +105,58 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(2, code)
                 self.assertIn("--solver-threads must be a positive integer", stderr.getvalue())
 
+    def test_min_assigned_cases_per_spec_must_not_be_negative(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(["--input", str(input_path), "--ru-band", str(support_path), "--min-assigned-cases-per-spec", "-1"])
+            self.assertEqual(2, code)
+            self.assertIn("--min-assigned-cases-per-spec must be zero or a positive integer", stderr.getvalue())
+
+    def test_low_use_summary_can_be_disabled(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            output_path = directory / "output.csv"
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(
+                    [
+                        "--input",
+                        str(input_path),
+                        "--ru-band",
+                        str(support_path),
+                        "--output",
+                        str(output_path),
+                        "--min-assigned-cases-per-spec",
+                        "0",
+                    ]
+                )
+            self.assertEqual(0, code)
+            with output_path.open(newline="", encoding="utf-8") as handle:
+                row = next(csv.DictReader(handle))
+            self.assertEqual("OPTIMAL", row["solve_status"])
+            self.assertNotIn("Low-use specs remain", stderr.getvalue())
+
+    def test_low_use_summary_reports_small_assigned_specs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            output_path = directory / "output.csv"
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = run(["--input", str(input_path), "--ru-band", str(support_path), "--output", str(output_path)])
+            self.assertEqual(0, code)
+            with output_path.open(newline="", encoding="utf-8") as handle:
+                row = next(csv.DictReader(handle))
+            self.assertEqual("FEASIBLE_LOW_USE_CHECKED", row["solve_status"])
+            self.assertIn("Low-use specs remain: 1 selected specs have fewer than 10 assigned testcases", stderr.getvalue())
+
     def test_auto_solver_uses_ortools_when_available(self):
         try:
             import ortools  # noqa: F401

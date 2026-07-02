@@ -24,13 +24,20 @@ The solver should prefer, in order:
    each additional spec adds equipment.
 3. Fewer testcase assignments to specs that are larger than the testcase's own
    requirements.
-4. Fewer selected test line specs.
+4. Fewer selected specs that receive very few assigned testcases, because such
+   specs are usually not worth building when a practical alternative exists.
+5. Fewer selected test line specs.
 
 A testcase is assigned to a larger spec when the selected spec contains extra
 slots, capacity, spec-side wildcard breadth, concrete values, or alternatives
 beyond what that testcase requires. These assignments are allowed only within
 the practicality guardrails by default, and should be minimized before spec
 count is optimized.
+
+A selected spec assigned fewer than 10 testcases is considered low-use by
+default. Low-use specs are undesirable, not invalid. The solver may keep them
+when they are needed for complete coverage or when avoiding them would increase
+total equipment or assignment excess.
 
 The first rewrite milestone only needs to read the input CSV files and parse
 their cells into normalized requirement tokens.
@@ -237,7 +244,7 @@ Required output columns:
 | `covered_tc_ids` | string list | Testcase IDs covered by this spec, joined with ` + `. |
 | `covered_count` | integer | Number of covered testcases. |
 | `equipment_count` | integer | Equipment count for this spec. |
-| `solve_status` | string | Solver status, such as `OPTIMAL` or `FEASIBLE_TIMEOUT`. |
+| `solve_status` | string | Solver status, such as `OPTIMAL`, `FEASIBLE_TIMEOUT`, `FEASIBLE_LOW_USE_CHECKED`, or `FEASIBLE_LOW_USE_REFINED`. |
 | input requirement columns | rendered requirement cell | Spec values for each input column except `tc_id`. |
 
 When auto-assignment is enabled, the output must also include:
@@ -252,6 +259,9 @@ selected specs for optimization. `--auto-assign` controls only whether those
 assignments are written to the output CSV. This prevents a selected spec from
 looking good only because it covers many cases broadly while no testcase would
 prefer to use it in practice.
+
+The low-use threshold is based on assigned testcase count, not technical
+coverage count. A threshold of `0` disables low-use analysis and refinement.
 
 `covered_tc_ids` and `assigned_tc_ids` must be computed from the same final spec
 representation that is written to output, after `ru`, `lte band`, and `nr band`
@@ -296,6 +306,9 @@ Output formatting rules:
 - `--limit-rows N` limits processing to the first `N` testcase input rows after
   parsing. It applies to both normal solving and `--parse-only`; `N` must be a
   positive integer.
+- `--min-assigned-cases-per-spec N` treats selected specs with fewer than `N`
+  assigned testcases as low-use. The default is `10`; `0` disables low-use
+  analysis and refinement.
 - The CLI should print progress messages and final elapsed time to stderr so
   stdout remains usable for `--parse-only` JSON output.
 
@@ -328,8 +341,16 @@ Default performance behavior:
   candidate when avoidable.
 - When the timeout is reached after a complete valid solution is found, output
   that solution with `solve_status` set to `FEASIBLE_TIMEOUT`.
-- `OPTIMAL` means optimal over the generated candidate pool under the active
-  guardrails and budgets, not over every theoretical possible spec.
+- When low-use analysis is enabled and completes without changing the primary
+  solution, output that solution with `solve_status` set to
+  `FEASIBLE_LOW_USE_CHECKED`.
+- When the primary solution is improved by the bounded low-use refinement pass,
+  output that solution with `solve_status` set to
+  `FEASIBLE_LOW_USE_REFINED`.
+- `OPTIMAL` means optimal over the generated candidate pool under the primary
+  guardrails and budgets, not over every theoretical possible spec. Low-use
+  refinement is a bounded heuristic, so low-use-aware runs use feasible-style
+  statuses rather than claiming global low-use optimality.
 
 ## First Milestone Expected Output
 
@@ -427,6 +448,10 @@ The wildcard-broadening score does not need to be large because assignment
 excess is minimized before selected spec count. A score of `1` is enough for an
 exact same-equipment assignment to beat a broader assignment before the solver
 tries to reduce the number of selected specs.
+
+Low-use handling is applied after equipment and assignment excess. The solver
+must not increase total equipment or final assignment excess merely to avoid a
+spec below the low-use threshold.
 
 Example:
 
@@ -556,6 +581,9 @@ Other requirement columns do not affect equipment count.
 - The final solver output contains only RU-band compatible specs.
 - The final solver does not select a single broad "catch-all" spec when a
   smaller-footprint set of specs satisfies the same coverage.
+- The final solver reports selected specs below the low-use assignment threshold
+  and may refine them away when doing so does not worsen equipment or assignment
+  excess.
 - The final solver returns a valid result for about 3000 testcase rows within
   the configured 600 second default timeout.
 - The final solver output is deterministic for the same input files and options.
