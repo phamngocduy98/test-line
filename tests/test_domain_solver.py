@@ -175,6 +175,36 @@ class DomainSolverTests(unittest.TestCase):
             self.assertEqual("RU1", row["ru"])
             self.assertEqual("T1", row["covered_tc_ids"])
 
+    def test_output_compacts_full_ru_and_band_domains_to_any(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band,nr band\nT1,any,any,any\n",
+                "ru,lte_band,nr_band\nRU1,b1,n1\nRU2,b2,n2\n",
+            )
+            output = directory / "output.csv"
+            solve_to_csv(parsed, support, output, SolveOptions())
+            with output.open(newline="", encoding="utf-8") as handle:
+                row = next(csv.DictReader(handle))
+            self.assertEqual("any", row["ru"])
+            self.assertEqual("any", row["lte band"])
+            self.assertEqual("any", row["nr band"])
+
+    def test_output_compacts_each_full_domain_slot_to_any(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band\nT1,any + any,b1\nT2,RU1,b2\n",
+                "ru,lte_band,nr_band\nRU1,b1 + b2,\nRU2,b1 + b2,\n",
+            )
+            output = directory / "output.csv"
+            solve_to_csv(parsed, support, output, SolveOptions(max_merge_width=5))
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            self.assertIn("any + any", {row["ru"] for row in rows})
+
     def test_solver_scores_candidates_against_expanded_domains(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)

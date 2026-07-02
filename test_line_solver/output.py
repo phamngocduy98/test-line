@@ -58,7 +58,7 @@ def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, sol
                 if options.ignore_optional_columns and column not in coverage_index.columns:
                     row[column] = ""
                 else:
-                    row[column] = render_tokens(spec.get(column, ()))
+                    row[column] = _render_output_tokens(column, spec.get(column, ()), support)
             writer.writerow(row)
 
 
@@ -115,3 +115,27 @@ def _join_tc_ids(parsed: ParsedCsv, indexes: tuple[int, ...]) -> str:
 
 def _rendered_signature(spec: dict[str, tuple[Token, ...]], columns: tuple[str, ...]) -> str:
     return "|".join(f"{column}={render_tokens(spec.get(column, ())) }" for column in columns)
+
+
+def _render_output_tokens(column: str, tokens: tuple[Token, ...], support: SupportTable) -> str:
+    if column == "ru":
+        return render_tokens(_compact_full_domain_tokens(tokens, support.ru_order))
+    if column == "lte band":
+        return render_tokens(_compact_full_domain_tokens(tokens, tuple(support.lte_display)))
+    if column == "nr band":
+        return render_tokens(_compact_full_domain_tokens(tokens, tuple(support.nr_display)))
+    return render_tokens(tokens)
+
+
+def _compact_full_domain_tokens(tokens: tuple[Token, ...], domain: tuple[str, ...]) -> tuple[Token, ...]:
+    if not domain:
+        return tokens
+    domain_values = set(domain)
+    compacted: list[Token] = []
+    for token in tokens:
+        token_values = {alternative.casefold() for alternative in token.alternatives}
+        if token_values == domain_values:
+            compacted.append(Token(("any",)))
+        else:
+            compacted.append(token)
+    return tuple(compacted)

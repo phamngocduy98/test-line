@@ -45,7 +45,7 @@ class CliTests(unittest.TestCase):
             with output_path.open(newline="", encoding="utf-8") as handle:
                 rows = list(csv.DictReader(handle))
             self.assertEqual("spec_1", rows[0]["spec_id"])
-            self.assertEqual("RU1", rows[0]["ru"])
+            self.assertEqual("any", rows[0]["ru"])
             self.assertIn("Solving selected test-line specs", stderr.getvalue())
             self.assertIn("Completed in", stderr.getvalue())
 
