@@ -5,23 +5,22 @@ from __future__ import annotations
 import csv
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import sys
 import time
 
 from .candidates import candidate_from_spec, generate_candidates
+from .coverage import equipment_count
 from .errors import InputError
-from .evaluation import SolutionEvaluation, SolutionEvaluator
+from .evaluation import EvaluatedCandidate, SolutionEvaluation, SolutionEvaluator
 from .merge import merge_specs
 from .models import Candidate, ParsedCsv, ParsedRow, Solution, SolveOptions, SupportTable, Token
+from .optimizer import _iter_bits
 from .output import write_solution_csv
 from .parsing import parse_cell
 from .validation import validate_testcases
 
 
-LOW_USE_MAX_REFINEMENT_ROUNDS = 2
-LOW_USE_MAX_SELECTED_MERGE_PARTNERS = 50
-LOW_USE_MAX_REPLACEMENT_CANDIDATES = 200
-LOW_USE_MAX_RESCUE_MERGE_CANDIDATES = 50
 LOW_USE_MIN_REMAINING_SECONDS = 0.05
 OUTPUT_METADATA_COLUMNS = frozenset(
     {
@@ -45,9 +44,25 @@ class _LowUseRefinement:
 
 
 @dataclass(frozen=True)
-class _LowUseMove:
-    candidates: tuple[Candidate, ...] | None
-    evaluation: SolutionEvaluation | None
+class _LowUseCandidatePool:
+    candidates: tuple[Candidate, ...]
+    completed: bool
+
+
+@dataclass(frozen=True)
+class _RefinementIndexedCandidate:
+    candidate: Candidate
+    evaluated: EvaluatedCandidate
+    group_mask: int
+    excess_by_group: dict[int, int]
+    equipment_count: int
+
+
+@dataclass(frozen=True)
+class _ExactLowUseResult:
+    candidates: tuple[Candidate, ...]
+    assignments: dict[int, Candidate]
+    evaluation: SolutionEvaluation
     completed: bool
 
 
@@ -224,116 +239,442 @@ def _refine_low_use_specs(
     deadline: float | None = None,
 ) -> _LowUseRefinement:
     best_candidates = _unique_candidates(solution.candidates)
-    best_evaluation = evaluator.evaluate(best_candidates)
+    best_solution = _solution_for_candidates(solution, best_candidates, evaluator)
+    best_evaluation = evaluator.evaluate(best_solution.candidates, best_solution.assignments)
     if options.min_assigned_cases_per_spec <= 0 or best_evaluation.low_use_spec_count == 0:
-        return _LowUseRefinement(solution, best_evaluation, changed=False, completed=True)
+        return _LowUseRefinement(best_solution, best_evaluation, changed=False, completed=True)
     if deadline is not None and not _has_refinement_time(deadline):
-        return _LowUseRefinement(solution, best_evaluation, changed=False, completed=False)
+        return _LowUseRefinement(best_solution, best_evaluation, changed=False, completed=False)
 
-    changed = False
-    all_candidates = tuple(sorted(candidates, key=lambda candidate: candidate.signature))
-    for _round in range(LOW_USE_MAX_REFINEMENT_ROUNDS):
-        improved = False
-        low_rows = sorted(
-            (row for row in best_evaluation.rows if row.assigned_count < options.min_assigned_cases_per_spec),
-            key=lambda row: (row.assigned_count, row.evaluated.output_signature),
-        )
-        for low_row in low_rows:
-            if deadline is not None and not _has_refinement_time(deadline):
-                return _LowUseRefinement(_solution_for_candidates(solution, best_candidates, evaluator), best_evaluation, changed=changed, completed=False)
-            current_candidates = tuple(row.evaluated.candidate for row in best_evaluation.rows)
-            replacement = _best_low_use_move(low_row.evaluated.candidate, current_candidates, all_candidates, best_evaluation, evaluator, deadline)
-            if not replacement.completed:
-                return _LowUseRefinement(_solution_for_candidates(solution, best_candidates, evaluator), best_evaluation, changed=changed, completed=False)
-            if replacement.candidates is None or replacement.evaluation is None:
-                continue
-            best_candidates, best_evaluation = replacement.candidates, replacement.evaluation
-            changed = True
-            improved = True
-            break
-        if not improved or best_evaluation.low_use_spec_count == 0:
-            break
-
-    return _LowUseRefinement(_solution_for_candidates(solution, best_candidates, evaluator), best_evaluation, changed=changed, completed=True)
+    pool = _build_low_use_refinement_pool(candidates, best_evaluation, evaluator, options, deadline)
+    result = _optimize_low_use_pool(pool.candidates, best_evaluation, evaluator, options, deadline)
+    changed = _solution_changed(best_solution, result)
+    refined_solution = Solution(result.candidates, result.assignments, solution.status)
+    return _LowUseRefinement(
+        refined_solution,
+        result.evaluation,
+        changed=changed,
+        completed=pool.completed and result.completed,
+    )
 
 
-def _best_low_use_move(
-    low_candidate: Candidate,
-    selected: tuple[Candidate, ...],
-    all_candidates: tuple[Candidate, ...],
-    current_evaluation: SolutionEvaluation,
+def _build_low_use_refinement_pool(
+    candidates: tuple[Candidate, ...],
+    evaluation: SolutionEvaluation,
     evaluator: SolutionEvaluator,
-    deadline: float | None = None,
-) -> _LowUseMove:
-    best_candidates: tuple[Candidate, ...] | None = None
-    best_evaluation: SolutionEvaluation | None = None
-    selected_signatures = {candidate.signature for candidate in selected}
-    selected_without_low = tuple(candidate for candidate in selected if candidate.signature != low_candidate.signature)
+    options: SolveOptions,
+    deadline: float | None,
+) -> _LowUseCandidatePool:
+    selected = tuple(row.evaluated.candidate for row in evaluation.rows)
+    low_rows = tuple(row for row in evaluation.rows if row.assigned_count < options.min_assigned_cases_per_spec)
+    target_group_mask = 0
+    for row in low_rows:
+        target_group_mask |= row.evaluated.coverage.group_mask
+        for testcase_index in row.assigned_indexes:
+            target_group_mask |= 1 << evaluator.coverage_index.row_to_group[testcase_index]
 
-    def consider(trial_candidates: tuple[Candidate, ...]) -> bool:
-        nonlocal best_candidates, best_evaluation
-        if deadline is not None and not _has_refinement_time(deadline):
+    completed = True
+    pool_by_signature: dict[str, Candidate] = {}
+
+    def add(candidate: Candidate, *, required: bool = False) -> bool:
+        nonlocal completed
+        if candidate.signature in pool_by_signature:
+            return True
+        if not required and len(pool_by_signature) >= options.max_low_use_refinement_candidates:
+            completed = False
             return False
-        trial_candidates = _unique_candidates(trial_candidates)
-        try:
-            trial_evaluation = evaluator.evaluate(trial_candidates)
-        except ValueError:
-            return True
-        if not _acceptable_low_use_improvement(trial_evaluation, current_evaluation):
-            return True
-        if best_evaluation is None or trial_evaluation.objective() < best_evaluation.objective():
-            best_candidates = trial_candidates
-            best_evaluation = trial_evaluation
+        pool_by_signature[candidate.signature] = candidate
+        if len(pool_by_signature) > options.max_low_use_refinement_candidates:
+            completed = False
         return True
 
-    if selected_without_low and not consider(selected_without_low):
-        return _LowUseMove(best_candidates, best_evaluation, completed=False)
+    for candidate in sorted(selected, key=lambda item: item.signature):
+        add(candidate, required=True)
 
-    selected_others = sorted(selected_without_low, key=lambda candidate: candidate.signature)[:LOW_USE_MAX_SELECTED_MERGE_PARTNERS]
-    for other in selected_others:
+    all_candidates = tuple(sorted(candidates, key=lambda item: _pool_candidate_key(item, target_group_mask)))
+    normal_candidates: list[Candidate] = []
+    for candidate in all_candidates:
         if deadline is not None and not _has_refinement_time(deadline):
-            return _LowUseMove(best_candidates, best_evaluation, completed=False)
-        merged = _merged_candidate(low_candidate, other, evaluator)
-        if merged is not None and not consider(tuple(candidate for candidate in selected_without_low if candidate.signature != other.signature) + (merged,)):
-            return _LowUseMove(best_candidates, best_evaluation, completed=False)
+            completed = False
+            break
+        group_mask = _evaluated_group_mask(candidate, evaluator)
+        if target_group_mask and not (group_mask & target_group_mask):
+            continue
+        normal_candidates.append(candidate)
+        if not add(candidate):
+            break
 
-    target_indexes = _target_indexes_for_candidate(low_candidate, current_evaluation)
-    promising = [
-        candidate
-        for candidate in all_candidates
-        if candidate.signature not in selected_signatures and (not target_indexes or target_indexes & candidate.coverage)
-    ]
-    promising.sort(key=lambda candidate: (candidate.equipment_count, -len(candidate.coverage & target_indexes), candidate.signature))
+    merge_partners = tuple(
+        sorted(
+            {candidate.signature: candidate for candidate in selected + tuple(normal_candidates)}.values(),
+            key=lambda item: _pool_candidate_key(item, target_group_mask),
+        )
+    )
+    frontier = tuple(row.evaluated.candidate for row in low_rows)
+    for _depth in range(options.max_low_use_merge_depth):
+        if not frontier or not completed:
+            break
+        next_frontier: list[Candidate] = []
+        for left in sorted(frontier, key=lambda item: item.signature):
+            for right in merge_partners:
+                if deadline is not None and not _has_refinement_time(deadline):
+                    completed = False
+                    break
+                merged = _merged_candidate(left, right, evaluator)
+                if merged is None or merged.signature in pool_by_signature:
+                    continue
+                if not add(merged):
+                    break
+                next_frontier.append(merged)
+            if not completed:
+                break
+        frontier = tuple(next_frontier)
 
-    for candidate in promising[:LOW_USE_MAX_REPLACEMENT_CANDIDATES]:
-        if not consider(selected_without_low + (candidate,)):
-            return _LowUseMove(best_candidates, best_evaluation, completed=False)
+    return _LowUseCandidatePool(
+        candidates=tuple(pool_by_signature[signature] for signature in sorted(pool_by_signature)),
+        completed=completed,
+    )
 
-    for candidate in promising[:LOW_USE_MAX_RESCUE_MERGE_CANDIDATES]:
+
+def _pool_candidate_key(candidate: Candidate, target_group_mask: int) -> tuple[int, int, str]:
+    target_coverage = (candidate.group_coverage_mask & target_group_mask).bit_count() if target_group_mask else len(candidate.coverage)
+    return (candidate.equipment_count, -target_coverage, candidate.signature)
+
+
+def _evaluated_group_mask(candidate: Candidate, evaluator: SolutionEvaluator) -> int:
+    if candidate.group_coverage_mask:
+        return candidate.group_coverage_mask
+    return evaluator._evaluate_candidate(candidate).coverage.group_mask
+
+
+def _optimize_low_use_pool(
+    candidates: tuple[Candidate, ...],
+    starting_evaluation: SolutionEvaluation,
+    evaluator: SolutionEvaluator,
+    options: SolveOptions,
+    deadline: float | None,
+) -> _ExactLowUseResult:
+    if options.solver != "stdlib":
+        try:
+            result = _optimize_low_use_pool_with_ortools(candidates, evaluator, options, deadline)
+        except ImportError:
+            result = None
+        if result is not None:
+            return _better_exact_result(result, starting_evaluation, evaluator)
+
+    if len(candidates) <= options.max_low_use_stdlib_candidates:
+        return _better_exact_result(
+            _optimize_low_use_pool_stdlib(candidates, evaluator, options, deadline),
+            starting_evaluation,
+            evaluator,
+        )
+
+    starting_candidates = tuple(row.evaluated.candidate for row in starting_evaluation.rows)
+    starting_assignments = _assignments_from_evaluation(starting_evaluation)
+    return _ExactLowUseResult(
+        candidates=starting_candidates,
+        assignments=starting_assignments,
+        evaluation=starting_evaluation,
+        completed=False,
+    )
+
+
+def _better_exact_result(
+    result: _ExactLowUseResult,
+    starting_evaluation: SolutionEvaluation,
+    evaluator: SolutionEvaluator,
+) -> _ExactLowUseResult:
+    if _low_use_refinement_objective(result.evaluation) <= _low_use_refinement_objective(starting_evaluation):
+        return result
+    starting_candidates = tuple(row.evaluated.candidate for row in starting_evaluation.rows)
+    starting_assignments = _assignments_from_evaluation(starting_evaluation)
+    return _ExactLowUseResult(
+        candidates=starting_candidates,
+        assignments=starting_assignments,
+        evaluation=evaluator.evaluate(starting_candidates, starting_assignments),
+        completed=result.completed,
+    )
+
+
+def _optimize_low_use_pool_stdlib(
+    candidates: tuple[Candidate, ...],
+    evaluator: SolutionEvaluator,
+    options: SolveOptions,
+    deadline: float | None,
+) -> _ExactLowUseResult:
+    indexed = _index_low_use_candidates(candidates, evaluator)
+    group_count = len(evaluator.coverage_index.groups)
+    weights = tuple(group.weight for group in evaluator.coverage_index.groups)
+    by_group = _low_use_candidates_by_group(indexed, group_count)
+    group_order = tuple(sorted(range(group_count), key=lambda group: (len(by_group[group]), -weights[group], group)))
+    if any(not covering for covering in by_group):
+        raise ValueError("bounded low-use refinement pool does not cover every testcase group")
+
+    greedy_group_assignments = _greedy_low_use_group_assignments(indexed, by_group, weights)
+    best_group_assignments = list(greedy_group_assignments)
+    best_objective = _low_use_assignment_objective(indexed, best_group_assignments, weights, options)
+    current_group_assignments = [-1 for _group in range(group_count)]
+    completed = True
+
+    def visit(position: int) -> None:
+        nonlocal best_group_assignments, best_objective, completed
         if deadline is not None and not _has_refinement_time(deadline):
-            return _LowUseMove(best_candidates, best_evaluation, completed=False)
-        merged = _merged_candidate(low_candidate, candidate, evaluator)
-        if merged is not None and not consider(selected_without_low + (merged,)):
-            return _LowUseMove(best_candidates, best_evaluation, completed=False)
+            completed = False
+            return
+        if position == len(group_order):
+            objective = _low_use_assignment_objective(indexed, current_group_assignments, weights, options)
+            if objective < best_objective:
+                best_objective = objective
+                best_group_assignments = list(current_group_assignments)
+            return
+        group_index = group_order[position]
+        for candidate_index in by_group[group_index]:
+            if not completed:
+                return
+            current_group_assignments[group_index] = candidate_index
+            visit(position + 1)
+            current_group_assignments[group_index] = -1
 
-    return _LowUseMove(best_candidates, best_evaluation, completed=True)
+    visit(0)
+    return _exact_result_from_group_assignments(indexed, best_group_assignments, evaluator, completed)
 
 
-def _acceptable_low_use_improvement(candidate: SolutionEvaluation, current: SolutionEvaluation) -> bool:
-    if candidate.total_equipment > current.total_equipment:
-        return False
-    if candidate.total_assignment_excess > current.total_assignment_excess:
-        return False
-    return (candidate.low_use_spec_count, candidate.low_use_deficit) < (current.low_use_spec_count, current.low_use_deficit)
+def _optimize_low_use_pool_with_ortools(
+    candidates: tuple[Candidate, ...],
+    evaluator: SolutionEvaluator,
+    options: SolveOptions,
+    deadline: float | None,
+) -> _ExactLowUseResult | None:
+    from ortools.sat.python import cp_model
+
+    indexed = _index_low_use_candidates(candidates, evaluator)
+    group_count = len(evaluator.coverage_index.groups)
+    weights = tuple(group.weight for group in evaluator.coverage_index.groups)
+    by_group = _low_use_candidates_by_group(indexed, group_count)
+    if any(not covering for covering in by_group):
+        raise ValueError("bounded low-use refinement pool does not cover every testcase group")
+
+    model = cp_model.CpModel()
+    assignment_vars: dict[tuple[int, int], object] = {}
+    selected_vars = [model.NewBoolVar(f"selected_{candidate_index}") for candidate_index in range(len(indexed))]
+    for group_index, covering in enumerate(by_group):
+        group_vars = []
+        for candidate_index in covering:
+            variable = model.NewBoolVar(f"assign_{candidate_index}_{group_index}")
+            assignment_vars[(candidate_index, group_index)] = variable
+            group_vars.append(variable)
+            model.Add(variable <= selected_vars[candidate_index])
+        model.Add(sum(group_vars) == 1)
+
+    low_vars = []
+    deficit_vars = []
+    threshold = options.min_assigned_cases_per_spec
+    for candidate_index, indexed_candidate in enumerate(indexed):
+        covered_vars = [
+            assignment_vars[(candidate_index, group_index)]
+            for group_index in _iter_bits(indexed_candidate.group_mask)
+            if (candidate_index, group_index) in assignment_vars
+        ]
+        if covered_vars:
+            model.Add(sum(covered_vars) >= selected_vars[candidate_index])
+        else:
+            model.Add(selected_vars[candidate_index] == 0)
+        assigned_count = sum(weights[group_index] * assignment_vars[(candidate_index, group_index)] for group_index in _iter_bits(indexed_candidate.group_mask) if (candidate_index, group_index) in assignment_vars)
+        deficit = model.NewIntVar(0, threshold, f"deficit_{candidate_index}")
+        low = model.NewBoolVar(f"low_{candidate_index}")
+        model.Add(deficit >= threshold * selected_vars[candidate_index] - assigned_count)
+        model.Add(deficit <= threshold * selected_vars[candidate_index])
+        model.Add(deficit <= threshold * low)
+        model.Add(deficit >= low)
+        model.Add(low <= selected_vars[candidate_index])
+        deficit_vars.append(deficit)
+        low_vars.append(low)
+
+    low_count_expr = sum(low_vars)
+    deficit_expr = sum(deficit_vars)
+    equipment_expr = sum(indexed_candidate.equipment_count * selected_vars[candidate_index] for candidate_index, indexed_candidate in enumerate(indexed))
+    excess_expr = sum(
+        weights[group_index] * indexed[candidate_index].excess_by_group.get(group_index, 0) * variable
+        for (candidate_index, group_index), variable in assignment_vars.items()
+    )
+    selected_count_expr = sum(selected_vars)
+    signature_rank_expr = sum(rank * selected_vars[candidate_index] for rank, candidate_index in enumerate(sorted(range(len(indexed)), key=lambda index: indexed[index].candidate.signature)))
+
+    best_result: _ExactLowUseResult | None = None
+    completed = True
+    for expression in (low_count_expr, deficit_expr, equipment_expr, excess_expr, selected_count_expr, signature_rank_expr):
+        if deadline is not None and not _has_refinement_time(deadline):
+            return _mark_incomplete(best_result)
+        model.Minimize(expression)
+        solver = cp_model.CpSolver()
+        if deadline is not None:
+            solver.parameters.max_time_in_seconds = max(0.0, _remaining_seconds(deadline))
+        solver.parameters.num_search_workers = _thread_count(options.solver_threads)
+        solver.parameters.random_seed = 0
+        status = solver.Solve(model)
+        if status not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            return _mark_incomplete(best_result)
+        group_assignments = [
+            next(candidate_index for candidate_index in by_group[group_index] if solver.BooleanValue(assignment_vars[(candidate_index, group_index)]))
+            for group_index in range(group_count)
+        ]
+        best_result = _exact_result_from_group_assignments(indexed, group_assignments, evaluator, completed=status == cp_model.OPTIMAL)
+        if status != cp_model.OPTIMAL:
+            completed = False
+            break
+        model.Add(expression == solver.Value(expression))
+    if best_result is None:
+        return None
+    if not completed:
+        return _mark_incomplete(best_result)
+    return best_result
 
 
-def _target_indexes_for_candidate(candidate: Candidate, evaluation: SolutionEvaluation) -> frozenset[int]:
+def _mark_incomplete(result: _ExactLowUseResult | None) -> _ExactLowUseResult | None:
+    if result is None:
+        return None
+    return _ExactLowUseResult(result.candidates, result.assignments, result.evaluation, completed=False)
+
+
+def _thread_count(solver_threads: int | None) -> int:
+    if solver_threads is not None:
+        return max(1, solver_threads)
+    return max(1, os.cpu_count() or 1)
+
+
+def _index_low_use_candidates(candidates: tuple[Candidate, ...], evaluator: SolutionEvaluator) -> tuple[_RefinementIndexedCandidate, ...]:
+    indexed: list[_RefinementIndexedCandidate] = []
+    seen: set[str] = set()
+    for candidate in sorted(candidates, key=lambda item: item.signature):
+        if candidate.signature in seen:
+            continue
+        seen.add(candidate.signature)
+        evaluated = evaluator._evaluate_candidate(candidate)
+        indexed.append(
+            _RefinementIndexedCandidate(
+                candidate=candidate,
+                evaluated=evaluated,
+                group_mask=evaluated.coverage.group_mask,
+                excess_by_group=evaluated.coverage.excess_by_group,
+                equipment_count=equipment_count(evaluated.spec),
+            )
+        )
+    return tuple(indexed)
+
+
+def _low_use_candidates_by_group(indexed: tuple[_RefinementIndexedCandidate, ...], group_count: int) -> list[list[int]]:
+    by_group: list[list[int]] = [[] for _group in range(group_count)]
+    for candidate_index, indexed_candidate in enumerate(indexed):
+        for group_index in _iter_bits(indexed_candidate.group_mask):
+            by_group[group_index].append(candidate_index)
+    for group_index, covering in enumerate(by_group):
+        covering.sort(
+            key=lambda candidate_index: (
+                indexed[candidate_index].excess_by_group.get(group_index, 0),
+                indexed[candidate_index].equipment_count,
+                indexed[candidate_index].candidate.signature,
+            )
+        )
+    return by_group
+
+
+def _greedy_low_use_group_assignments(
+    indexed: tuple[_RefinementIndexedCandidate, ...],
+    by_group: list[list[int]],
+    weights: tuple[int, ...],
+) -> list[int]:
+    assignments = [-1 for _group in by_group]
+    assigned_counts = [0 for _candidate in indexed]
+    for group_index, covering in sorted(enumerate(by_group), key=lambda item: (-weights[item[0]], len(item[1]), item[0])):
+        candidate_index = min(
+            covering,
+            key=lambda index: (
+                assigned_counts[index] == 0,
+                indexed[index].excess_by_group.get(group_index, 0),
+                indexed[index].equipment_count,
+                indexed[index].candidate.signature,
+            ),
+        )
+        assignments[group_index] = candidate_index
+        assigned_counts[candidate_index] += weights[group_index]
+    return assignments
+
+
+def _low_use_assignment_objective(
+    indexed: tuple[_RefinementIndexedCandidate, ...],
+    group_assignments: list[int],
+    weights: tuple[int, ...],
+    options: SolveOptions,
+) -> tuple[int, int, int, int, int, tuple[str, ...]]:
+    assigned_counts = [0 for _candidate in indexed]
+    total_excess = 0
+    for group_index, candidate_index in enumerate(group_assignments):
+        if candidate_index < 0:
+            continue
+        assigned_counts[candidate_index] += weights[group_index]
+        total_excess += weights[group_index] * indexed[candidate_index].excess_by_group.get(group_index, 0)
+    selected_indexes = tuple(index for index, assigned_count in enumerate(assigned_counts) if assigned_count > 0)
+    deficits = [max(0, options.min_assigned_cases_per_spec - assigned_counts[index]) for index in selected_indexes]
+    return (
+        sum(1 for deficit in deficits if deficit),
+        sum(deficits),
+        sum(indexed[index].equipment_count for index in selected_indexes),
+        total_excess,
+        len(selected_indexes),
+        tuple(sorted(indexed[index].evaluated.output_signature for index in selected_indexes)),
+    )
+
+
+def _exact_result_from_group_assignments(
+    indexed: tuple[_RefinementIndexedCandidate, ...],
+    group_assignments: list[int],
+    evaluator: SolutionEvaluator,
+    completed: bool,
+) -> _ExactLowUseResult:
+    selected_indexes = tuple(sorted({candidate_index for candidate_index in group_assignments if candidate_index >= 0}, key=lambda index: indexed[index].candidate.signature))
+    selected_candidates = tuple(indexed[index].candidate for index in selected_indexes)
+    selected_by_original_index = {original_index: indexed[original_index].candidate for original_index in selected_indexes}
+    assignments: dict[int, Candidate] = {}
+    for group_index, original_candidate_index in enumerate(group_assignments):
+        candidate = selected_by_original_index[original_candidate_index]
+        for row_index in evaluator.coverage_index.groups[group_index].row_indexes:
+            assignments[row_index] = candidate
+    evaluation = evaluator.evaluate(selected_candidates, assignments)
+    return _ExactLowUseResult(
+        candidates=selected_candidates,
+        assignments=assignments,
+        evaluation=evaluation,
+        completed=completed,
+    )
+
+
+def _assignments_from_evaluation(evaluation: SolutionEvaluation) -> dict[int, Candidate]:
+    assignments: dict[int, Candidate] = {}
     for row in evaluation.rows:
-        if row.evaluated.candidate.signature == candidate.signature:
-            if row.assigned_indexes:
-                return frozenset(row.assigned_indexes)
-            return frozenset(row.evaluated.coverage.row_indexes)
-    return frozenset(candidate.coverage)
+        for testcase_index in row.assigned_indexes:
+            assignments[testcase_index] = row.evaluated.candidate
+    return assignments
+
+
+def _solution_changed(solution: Solution, result: _ExactLowUseResult) -> bool:
+    if tuple(candidate.signature for candidate in solution.candidates) != tuple(candidate.signature for candidate in result.candidates):
+        return True
+    return {
+        index: candidate.signature for index, candidate in solution.assignments.items()
+    } != {
+        index: candidate.signature for index, candidate in result.assignments.items()
+    }
+
+
+def _low_use_refinement_objective(evaluation: SolutionEvaluation) -> tuple[int, int, int, int, int, tuple[str, ...]]:
+    return (
+        evaluation.low_use_spec_count,
+        evaluation.low_use_deficit,
+        evaluation.total_equipment,
+        evaluation.total_assignment_excess,
+        evaluation.selected_spec_count,
+        tuple(sorted(row.evaluated.output_signature for row in evaluation.rows)),
+    )
 
 
 def _merged_candidate(left: Candidate, right: Candidate, evaluator: SolutionEvaluator) -> Candidate | None:
@@ -361,8 +702,8 @@ def _assign_candidates(candidates: tuple[Candidate, ...], testcase_count: int) -
 
 
 def _solution_for_candidates(original: Solution, candidates: tuple[Candidate, ...], evaluator: SolutionEvaluator) -> Solution:
-    if tuple(candidate.signature for candidate in candidates) == tuple(candidate.signature for candidate in original.candidates):
-        return original
+    if {candidate.signature for candidate in candidates} == {candidate.signature for candidate in original.candidates}:
+        return Solution(candidates, original.assignments, original.status)
     return Solution(
         candidates=candidates,
         assignments=_assign_candidates(candidates, len(evaluator.parsed.rows)),

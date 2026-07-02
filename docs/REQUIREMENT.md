@@ -35,9 +35,13 @@ the practicality guardrails by default, and should be minimized before spec
 count is optimized.
 
 A selected spec assigned fewer than 10 testcases is considered low-use by
-default. Low-use specs are undesirable, not invalid. The solver may keep them
-when they are needed for complete coverage or when avoiding them would increase
-total equipment or assignment excess.
+default. Low-use specs are undesirable, not invalid. Low-use refinement should
+try to merge or replace low-use specs until none remain when feasible. If
+eliminating low-use specs requires extra equipment or assignment excess, choose
+the lowest-cost refined solution after minimizing low-use count and deficit.
+That refined solution is exact over the completed bounded low-use refinement
+candidate pool. If the pool is capped or proof times out, the solver must keep
+the best valid refined solution found and report timeout-style status.
 
 The first rewrite milestone only needs to read the input CSV files and parse
 their cells into normalized requirement tokens.
@@ -316,6 +320,14 @@ Output formatting rules:
   from an existing output CSV, regenerates candidates from the current input and
   RU-band support, runs only low-use refinement, and writes a new output CSV.
   It cannot be used with `--parse-only` or with low-use refinement disabled.
+- `--max-low-use-refinement-candidates N` caps the bounded low-use refinement
+  candidate pool. The default is `5000`; `N` must be a positive integer.
+- `--max-low-use-merge-depth N` caps merge-closure depth for low-use refinement
+  candidates anchored to an original low-use spec. The default is `8`; `N` must
+  be a positive integer.
+- `--max-low-use-stdlib-candidates N` caps when the standard-library exact
+  low-use refinement fallback is allowed to prove optimality without OR-Tools.
+  The default is `300`; `N` must be a positive integer.
 - The CLI should print progress messages and final elapsed time to stderr so
   stdout remains usable for `--parse-only` JSON output.
 
@@ -372,8 +384,11 @@ Default performance behavior:
   `FEASIBLE_LOW_USE_REFINED`.
 - `OPTIMAL` means optimal over the generated candidate pool under the primary
   guardrails and budgets, not over every theoretical possible spec. Low-use
-  refinement is a bounded heuristic, so low-use-aware runs use feasible-style
-  statuses rather than claiming global low-use optimality.
+  refinement proves optimality only over the completed bounded refinement pool.
+  If low-use refinement candidate generation is capped, OR-Tools or the
+  standard-library fallback cannot prove optimality, or the refinement timeout
+  expires, the final status must be timeout-style rather than claiming proven
+  low-use optimality.
 
 ## First Milestone Expected Output
 
@@ -472,9 +487,13 @@ excess is minimized before selected spec count. A score of `1` is enough for an
 exact same-equipment assignment to beat a broader assignment before the solver
 tries to reduce the number of selected specs.
 
-Low-use handling is applied after equipment and assignment excess. The solver
-must not increase total equipment or final assignment excess merely to avoid a
-spec below the low-use threshold.
+Low-use handling is applied as a bounded post-solve refinement objective. During
+that refinement, reducing low-use selected specs and low-use deficit is primary;
+equipment count and final assignment excess deltas from the starting solution
+are then minimized as the extra cost of the low-use reduction. The refinement
+optimizer must model testcase assignment directly so low-use counts, deficits,
+and output `assigned_count` values describe the optimized assignments rather
+than a separate greedy post-processing pass.
 
 Example:
 
@@ -605,8 +624,8 @@ Other requirement columns do not affect equipment count.
 - The final solver does not select a single broad "catch-all" spec when a
   smaller-footprint set of specs satisfies the same coverage.
 - The final solver reports selected specs below the low-use assignment threshold
-  and may refine them away when doing so does not worsen equipment or assignment
-  excess.
+  and may refine them away while minimizing the extra equipment and assignment
+  excess needed to remove low-use specs.
 - The final solver returns a valid result for about 3000 testcase rows within
   the configured 600 second default timeout.
 - The final solver output is deterministic for the same input files and options.

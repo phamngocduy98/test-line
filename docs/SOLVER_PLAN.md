@@ -73,8 +73,8 @@ requirements.
   - Satisfy guardrails.
   - Minimize total equipment count.
   - Minimize total assignment excess.
-  - Minimize low-use selected specs and low-use deficit when doing so does not
-    worsen equipment or assignment excess.
+  - During low-use refinement, minimize low-use selected specs and low-use
+    deficit first, then minimize equipment and assignment-excess cost.
   - Minimize selected spec count.
   - Use deterministic tie-breaks.
 - Model assignment during optimization. Every testcase is assigned to exactly one
@@ -85,10 +85,15 @@ requirements.
   domains after RU/band wildcard expansion, so output never claims coverage that
   the rendered spec cannot actually provide.
 - Share final expanded assignment evaluation between output and low-use
-  analysis. Run a bounded post-solve low-use refinement pass that may remove or
-  replace low-use specs only when complete coverage, total equipment, and final
-  assignment excess are not worsened. The pass uses the remaining `--timeout`
-  budget and reports `FEASIBLE_TIMEOUT` if it cannot complete low-use checking.
+  analysis. Run an exact post-solve low-use refinement pass over a bounded
+  candidate pool that may remove, replace, or merge low-use specs while
+  minimizing low-use count and deficit before equipment and assignment-excess
+  deltas from the starting solution. The pass uses the remaining `--timeout`
+  budget and reports `FEASIBLE_TIMEOUT` if the bounded pool is capped or it
+  cannot prove refinement optimality.
+- Build the bounded low-use refinement pool deterministically from the selected
+  specs, generated candidates touching low-use coverage, and merge-closure
+  candidates anchored to original low-use specs.
 - Add `--low-use-refinement-timeout` so low-use refinement can receive a
   dedicated post-solve budget. When set, refinement still runs after a primary
   `FEASIBLE_TIMEOUT`; the final status remains `FEASIBLE_TIMEOUT` if the
@@ -135,6 +140,9 @@ requirements.
   - `--reject-spec-side-wildcard COLUMN`, repeatable
   - `--min-assigned-cases-per-spec N`, default `10`; `0` disables low-use
     analysis and refinement
+  - `--max-low-use-refinement-candidates N`, default `5000`
+  - `--max-low-use-merge-depth N`, default `8`
+  - `--max-low-use-stdlib-candidates N`, default `300`
 - CLI progress and elapsed-time messages are written to stderr so parse-only
   JSON remains the only stdout payload.
 
@@ -165,9 +173,11 @@ requirements.
 - Solver tests proving a broad catch-all candidate loses to focused specs when
   it has greater equipment or assignment excess.
 - Solver tests proving low-use specs are reported, can be disabled with
-  `--min-assigned-cases-per-spec 0`, and are refined only when equipment and
-  assignment excess do not get worse. Include status tests for checked, refined,
-  disabled, and timeout cases.
+  `--min-assigned-cases-per-spec 0`, and are refined by minimizing low-use count
+  and deficit before extra equipment and assignment-excess cost. Include exact
+  bounded-pool tests where greedy pairwise refinement would choose a worse merge
+  pattern, candidate-cap timeout tests, assignment-sensitive tests, and status
+  tests for checked, refined, disabled, and timeout cases.
 - Tests proving a primary `FEASIBLE_TIMEOUT` does not starve refinement when
   `--low-use-refinement-timeout` is set.
 - Refinement-only tests proving imported output metadata is ignored, current

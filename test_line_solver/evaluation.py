@@ -63,10 +63,17 @@ class SolutionEvaluator:
         self.coverage_index = CoverageIndex.build(parsed, support, options)
         self._candidate_cache: dict[str, EvaluatedCandidate] = {}
 
-    def evaluate(self, candidates: tuple[Candidate, ...]) -> SolutionEvaluation:
+    def evaluate(
+        self,
+        candidates: tuple[Candidate, ...],
+        assignments: dict[int, Candidate] | None = None,
+    ) -> SolutionEvaluation:
         evaluated_rows = tuple(self._evaluate_candidate(candidate) for candidate in candidates)
         self._validate_coverage(evaluated_rows)
-        assigned_indexes, assigned_excess = self._assign_rows(evaluated_rows)
+        if assignments is None:
+            assigned_indexes, assigned_excess = self._assign_rows(evaluated_rows)
+        else:
+            assigned_indexes, assigned_excess = self._assigned_rows_from_solution(evaluated_rows, assignments)
 
         rows = tuple(
             AssignedCandidate(
@@ -142,6 +149,33 @@ class SolutionEvaluator:
         bad_indexes = [index for index, count in enumerate(assignment_counts) if count != 1]
         if bad_indexes:
             raise ValueError(f"expanded solution does not assign testcase indexes exactly once: {bad_indexes}")
+        return assigned_indexes, assigned_excess
+
+    def _assigned_rows_from_solution(
+        self,
+        rows: tuple[EvaluatedCandidate, ...],
+        assignments: dict[int, Candidate],
+    ) -> tuple[list[list[int]], list[int]]:
+        expected = set(range(len(self.parsed.rows)))
+        assigned = set(assignments)
+        if assigned != expected:
+            bad_indexes = sorted(expected ^ assigned)
+            raise ValueError(f"expanded solution does not assign testcase indexes exactly once: {bad_indexes}")
+
+        row_by_signature = {row.candidate.signature: index for index, row in enumerate(rows)}
+        assigned_indexes: list[list[int]] = [[] for _row in rows]
+        assigned_excess = [0 for _row in rows]
+        for testcase_index in range(len(self.parsed.rows)):
+            candidate = assignments[testcase_index]
+            selected_index = row_by_signature.get(candidate.signature)
+            if selected_index is None:
+                raise ValueError(f"testcase index {testcase_index} is assigned to a non-selected spec")
+            evaluated = rows[selected_index]
+            group_index = self.coverage_index.row_to_group[testcase_index]
+            if not evaluated.coverage.group_mask & (1 << group_index):
+                raise ValueError(f"testcase index {testcase_index} is assigned to a spec that does not cover it")
+            assigned_indexes[selected_index].append(testcase_index)
+            assigned_excess[selected_index] += evaluated.coverage.excess_by_group.get(group_index, 0)
         return assigned_indexes, assigned_excess
 
 

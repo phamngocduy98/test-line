@@ -127,6 +127,23 @@ class CliTests(unittest.TestCase):
             self.assertEqual(2, code)
             self.assertIn("--low-use-refinement-timeout must be positive", stderr.getvalue())
 
+    def test_low_use_refinement_bounds_must_be_positive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            cases = (
+                ("--max-low-use-refinement-candidates", "--max-low-use-refinement-candidates must be a positive integer"),
+                ("--max-low-use-merge-depth", "--max-low-use-merge-depth must be a positive integer"),
+                ("--max-low-use-stdlib-candidates", "--max-low-use-stdlib-candidates must be a positive integer"),
+            )
+            for option, message in cases:
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    code = run(["--input", str(input_path), "--ru-band", str(support_path), option, "0"])
+                self.assertEqual(2, code)
+                self.assertIn(message, stderr.getvalue())
+
     def test_refine_output_rejects_parse_only_and_disabled_low_use(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)

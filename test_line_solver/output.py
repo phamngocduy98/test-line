@@ -14,7 +14,7 @@ from .parsing import render_tokens
 def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, solution: Solution, options: SolveOptions) -> None:
     output_requirement_columns = tuple(column for column in parsed.columns if column != "tc_id")
     active_columns = set(active_requirement_columns(parsed.columns, options))
-    evaluation = SolutionEvaluator(parsed, support, options).evaluate(solution.candidates)
+    evaluation = SolutionEvaluator(parsed, support, options).evaluate(solution.candidates, solution.assignments)
     rows = list(evaluation.rows)
 
     rows.sort(

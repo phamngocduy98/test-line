@@ -53,6 +53,9 @@ class SolveOptions:
     max_numeric_overage_units: int = 1
     reject_spec_side_wildcard: tuple[str, ...] = ()
     min_assigned_cases_per_spec: int = 10
+    max_low_use_refinement_candidates: int = 5000
+    max_low_use_merge_depth: int = 8
+    max_low_use_stdlib_candidates: int = 300
 
 
 @dataclass(frozen=True)

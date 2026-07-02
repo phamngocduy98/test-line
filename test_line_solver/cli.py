@@ -13,6 +13,9 @@ from .constants import (
     DEFAULT_MAX_CANDIDATES_PER_BUCKET,
     DEFAULT_MAX_EXTRA_ALTERNATIVES,
     DEFAULT_MAX_EXTRA_SLOTS,
+    DEFAULT_MAX_LOW_USE_MERGE_DEPTH,
+    DEFAULT_MAX_LOW_USE_REFINEMENT_CANDIDATES,
+    DEFAULT_MAX_LOW_USE_STDLIB_CANDIDATES,
     DEFAULT_MAX_MERGE_WIDTH,
     DEFAULT_MAX_NUMERIC_OVERAGE_RATIO,
     DEFAULT_MAX_NUMERIC_OVERAGE_UNITS,
@@ -66,6 +69,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_MIN_ASSIGNED_CASES_PER_SPEC,
         help="Treat selected specs with fewer than N assigned testcases as low-use. Use 0 to disable.",
     )
+    parser.add_argument(
+        "--max-low-use-refinement-candidates",
+        type=int,
+        default=DEFAULT_MAX_LOW_USE_REFINEMENT_CANDIDATES,
+        help="Maximum bounded candidate pool size for low-use refinement.",
+    )
+    parser.add_argument(
+        "--max-low-use-merge-depth",
+        type=int,
+        default=DEFAULT_MAX_LOW_USE_MERGE_DEPTH,
+        help="Maximum merge-closure depth for low-use refinement candidates.",
+    )
+    parser.add_argument(
+        "--max-low-use-stdlib-candidates",
+        type=int,
+        default=DEFAULT_MAX_LOW_USE_STDLIB_CANDIDATES,
+        help="Maximum low-use refinement candidate pool size for the standard-library exact fallback.",
+    )
     return parser.parse_args(argv)
 
 
@@ -92,6 +113,12 @@ def options_from_args(args: argparse.Namespace) -> SolveOptions:
         raise InputError("--refine-output cannot be used with --parse-only")
     if args.refine_output and args.min_assigned_cases_per_spec <= 0:
         raise InputError("--refine-output requires --min-assigned-cases-per-spec greater than zero")
+    if args.max_low_use_refinement_candidates < 1:
+        raise InputError("--max-low-use-refinement-candidates must be a positive integer")
+    if args.max_low_use_merge_depth < 1:
+        raise InputError("--max-low-use-merge-depth must be a positive integer")
+    if args.max_low_use_stdlib_candidates < 1:
+        raise InputError("--max-low-use-stdlib-candidates must be a positive integer")
     return SolveOptions(
         ignore_optional_columns=args.ignore_optional_columns,
         auto_assign=args.auto_assign,
@@ -108,6 +135,9 @@ def options_from_args(args: argparse.Namespace) -> SolveOptions:
         max_numeric_overage_units=args.max_numeric_overage_units,
         reject_spec_side_wildcard=tuple(args.reject_spec_side_wildcard),
         min_assigned_cases_per_spec=args.min_assigned_cases_per_spec,
+        max_low_use_refinement_candidates=args.max_low_use_refinement_candidates,
+        max_low_use_merge_depth=args.max_low_use_merge_depth,
+        max_low_use_stdlib_candidates=args.max_low_use_stdlib_candidates,
     )
 
 

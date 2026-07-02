@@ -302,6 +302,141 @@ class DomainSolverTests(unittest.TestCase):
             self.assertEqual(0, refinement.evaluation.total_assignment_excess)
             self.assertEqual("FEASIBLE_LOW_USE_REFINED", _solution_with_low_use_status(refinement, options).status)
 
+    def test_low_use_refinement_merges_low_use_specs_with_minimal_extra_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band,cc location\nT1,RU1,b1,A\nT2,RU1,b1,B\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            options = SolveOptions(max_merge_width=5, min_assigned_cases_per_spec=2)
+            candidates = generate_candidates(parsed, support, options)
+            selected = tuple(
+                sorted(
+                    (candidate for candidate in candidates if candidate.source_indexes in {(0,), (1,)}),
+                    key=lambda candidate: candidate.source_indexes,
+                )
+            )
+            refinement = _refine_low_use_specs(
+                candidates,
+                Solution(selected, {0: selected[0], 1: selected[1]}, "OPTIMAL"),
+                SolutionEvaluator(parsed, support, options),
+                options,
+            )
+            self.assertTrue(refinement.completed)
+            self.assertTrue(refinement.changed)
+            self.assertEqual(1, len(refinement.solution.candidates))
+            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
+            self.assertEqual(2, refinement.evaluation.total_assignment_excess)
+            self.assertEqual("FEASIBLE_LOW_USE_REFINED", _solution_with_low_use_status(refinement, options).status)
+
+    def test_low_use_refinement_chooses_global_minimal_extra_cost(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band,cc location\n"
+                "T1,RU1,b1,A\n"
+                "T2,RU1,b1,B\n"
+                "T3,RU2,b2,A\n"
+                "T4,RU2,b2,B\n",
+                "ru,lte_band,nr_band\nRU1,b1,\nRU2,b2,\n",
+            )
+            options = SolveOptions(max_merge_width=5, min_assigned_cases_per_spec=2, solver="stdlib")
+            candidates = generate_candidates(parsed, support, options)
+            selected = tuple(candidate for candidate in candidates if len(candidate.source_indexes) == 1)
+            refinement = _refine_low_use_specs(
+                candidates,
+                Solution(selected, {index: selected[index] for index in range(4)}, "OPTIMAL"),
+                SolutionEvaluator(parsed, support, options),
+                options,
+            )
+
+            self.assertTrue(refinement.completed)
+            self.assertTrue(refinement.changed)
+            self.assertEqual(2, len(refinement.solution.candidates))
+            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
+            self.assertEqual(2, refinement.evaluation.total_equipment)
+            self.assertEqual(4, refinement.evaluation.total_assignment_excess)
+            self.assertEqual(
+                ["T1 + T2", "T3 + T4"],
+                [self._tc_ids(parsed, row.assigned_indexes) for row in refinement.evaluation.rows],
+            )
+
+    def test_low_use_refinement_candidate_cap_marks_result_incomplete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band\nT1,RU1,b1\nT2,RU1,b1\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            options = SolveOptions(
+                min_assigned_cases_per_spec=2,
+                max_low_use_refinement_candidates=1,
+                solver="stdlib",
+            )
+            candidates = generate_candidates(parsed, support, options)
+            selected = tuple(
+                Candidate(
+                    f"duplicate-{index}",
+                    {"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),)},
+                    (index,),
+                    1,
+                    frozenset({0, 1}),
+                    {0: 0, 1: 0},
+                )
+                for index in range(2)
+            )
+            refinement = _refine_low_use_specs(
+                candidates + selected,
+                Solution(selected, {0: selected[0], 1: selected[0]}, "OPTIMAL"),
+                SolutionEvaluator(parsed, support, options),
+                options,
+            )
+
+            self.assertFalse(refinement.completed)
+            self.assertTrue(refinement.changed)
+            self.assertEqual(1, len(refinement.solution.candidates))
+            self.assertEqual("FEASIBLE_TIMEOUT", _solution_with_low_use_status(refinement, options).status)
+
+    def test_output_honors_explicit_solution_assignments(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            parsed, support = self.parsed(
+                directory,
+                "tc_id,ru,lte band,cc location\nT1,RU1,b1,A\nT2,RU1,b1,A\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            exact = Candidate(
+                "exact",
+                {"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("A",)),)},
+                (),
+                1,
+                frozenset({0, 1}),
+                {0: 0, 1: 0},
+            )
+            broad = Candidate(
+                "broad",
+                {"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("any",)),)},
+                (),
+                1,
+                frozenset({0, 1}),
+                {0: 1, 1: 1},
+            )
+            output = directory / "output.csv"
+            write_solution_csv(
+                output,
+                parsed,
+                support,
+                Solution((exact, broad), {0: broad, 1: broad}, "OPTIMAL"),
+                SolveOptions(auto_assign=True),
+            )
+
+            with output.open(newline="", encoding="utf-8") as handle:
+                rows = list(csv.DictReader(handle))
+            assigned_by_location = {row["cc location"]: row["assigned_tc_ids"] for row in rows}
+            self.assertEqual("", assigned_by_location["A"])
+            self.assertEqual("T1 + T2", assigned_by_location["any"])
+
     def test_low_use_refinement_stops_when_deadline_is_exhausted(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
@@ -389,6 +524,9 @@ class DomainSolverTests(unittest.TestCase):
             self.assertEqual(1, len(rows))
             self.assertEqual("FEASIBLE_LOW_USE_REFINED", rows[0]["solve_status"])
             self.assertEqual("T1 + T2", rows[0]["covered_tc_ids"])
+
+    def _tc_ids(self, parsed, indexes):
+        return " + ".join(parsed.rows[index].raw["tc_id"] for index in indexes)
 
 
 if __name__ == "__main__":
