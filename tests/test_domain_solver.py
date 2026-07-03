@@ -290,7 +290,6 @@ class DomainSolverTests(unittest.TestCase):
             duplicate = Candidate("a-copy", spec, (1,), 1, frozenset({0, 1}), {0: 0, 1: 0})
             options = SolveOptions(min_assigned_cases_per_spec=2)
             refinement = _refine_low_use_specs(
-                (first, duplicate),
                 Solution((first, duplicate), {0: first, 1: first}, "OPTIMAL"),
                 SolutionEvaluator(parsed, support, options),
                 options,
@@ -303,7 +302,7 @@ class DomainSolverTests(unittest.TestCase):
             self.assertEqual(0, refinement.evaluation.total_assignment_excess)
             self.assertEqual("FEASIBLE_LOW_USE_REFINED", _solution_with_low_use_status(refinement, options).status)
 
-    def test_low_use_refinement_merges_low_use_specs_with_minimal_extra_cost(self):
+    def test_low_use_merge_pass_leaves_assigned_low_specs_without_receiver(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
@@ -319,36 +318,57 @@ class DomainSolverTests(unittest.TestCase):
                 )
             )
             refinement = _refine_low_use_specs(
-                candidates,
                 Solution(selected, {0: selected[0], 1: selected[1]}, "OPTIMAL"),
                 SolutionEvaluator(parsed, support, options),
                 options,
             )
             self.assertTrue(refinement.completed)
-            self.assertTrue(refinement.changed)
-            self.assertEqual(1, len(refinement.solution.candidates))
-            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
-            self.assertEqual(2, refinement.evaluation.total_assignment_excess)
-            self.assertEqual("FEASIBLE_LOW_USE_REFINED", _solution_with_low_use_status(refinement, options).status)
+            self.assertFalse(refinement.changed)
+            self.assertEqual(2, len(refinement.solution.candidates))
+            self.assertEqual(2, refinement.evaluation.low_use_spec_count)
+            self.assertEqual("FEASIBLE_LOW_USE_CHECKED", _solution_with_low_use_status(refinement, options).status)
 
-    def test_low_use_refinement_chooses_global_minimal_extra_cost(self):
+    def test_low_use_merge_pass_exact_small_search_chooses_smallest_equipment_delta(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
-                "tc_id,ru,lte band,cc location\n"
-                "T1,RU1,b1,A\n"
-                "T2,RU1,b1,B\n"
-                "T3,RU2,b2,A\n"
-                "T4,RU2,b2,B\n",
-                "ru,lte_band,nr_band\nRU1,b1,\nRU2,b2,\n",
+                "tc_id,enb,ru,cc location\n"
+                "A1,1,,A\nA2,1,,A\nA3,1,,A\n"
+                "B1,4,,B\nB2,4,,B\nB3,4,,B\n"
+                "C1,5,,C\n",
+                "ru,lte_band,nr_band\nRU1,,\n",
             )
-            options = SolveOptions(max_merge_width=5, min_assigned_cases_per_spec=2, solver="stdlib")
-            candidates = generate_candidates(parsed, support, options)
-            selected = tuple(candidate for candidate in candidates if len(candidate.source_indexes) == 1)
+            options = SolveOptions(
+                max_extra_slots=2,
+                max_numeric_overage_ratio=10.0,
+                max_numeric_overage_units=10,
+                min_assigned_cases_per_spec=3,
+                max_low_use_merge_combinations=1000000,
+                solver="stdlib",
+            )
+            evaluator = SolutionEvaluator(parsed, support, options)
+            receiver_a = candidate_from_spec({"enb": (Token(("1",)),), "ru": (), "cc location": (Token(("A",)),)}, (0, 1, 2), evaluator.coverage_index)
+            receiver_b = candidate_from_spec({"enb": (Token(("4",)),), "ru": (), "cc location": (Token(("B",)),)}, (3, 4, 5), evaluator.coverage_index)
+            low_c = candidate_from_spec({"enb": (Token(("5",)),), "ru": (), "cc location": (Token(("C",)),)}, (6,), evaluator.coverage_index)
+            self.assertIsNotNone(receiver_a)
+            self.assertIsNotNone(receiver_b)
+            self.assertIsNotNone(low_c)
+            selected = (receiver_a, receiver_b, low_c)
             refinement = _refine_low_use_specs(
-                candidates,
-                Solution(selected, {index: selected[index] for index in range(4)}, "OPTIMAL"),
-                SolutionEvaluator(parsed, support, options),
+                Solution(
+                    selected,
+                    {
+                        0: receiver_a,
+                        1: receiver_a,
+                        2: receiver_a,
+                        3: receiver_b,
+                        4: receiver_b,
+                        5: receiver_b,
+                        6: low_c,
+                    },
+                    "OPTIMAL",
+                ),
+                evaluator,
                 options,
             )
 
@@ -356,56 +376,97 @@ class DomainSolverTests(unittest.TestCase):
             self.assertTrue(refinement.changed)
             self.assertEqual(2, len(refinement.solution.candidates))
             self.assertEqual(0, refinement.evaluation.low_use_spec_count)
-            self.assertEqual(2, refinement.evaluation.total_equipment)
-            self.assertEqual(4, refinement.evaluation.total_assignment_excess)
+            self.assertEqual(6, refinement.evaluation.total_equipment)
             self.assertEqual(
-                ["T1 + T2", "T3 + T4"],
+                ["A1 + A2 + A3", "B1 + B2 + B3 + C1"],
                 [self._tc_ids(parsed, row.assigned_indexes) for row in refinement.evaluation.rows],
             )
 
-    def test_low_use_evacuation_merges_small_clusters_iteratively(self):
+    def test_low_use_merge_pass_exact_small_falls_back_to_partial_improvement(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
-                "tc_id,ru,lte band,cc location\n"
-                "A1,RU1,b1,A\nA2,RU1,b1,A\nA3,RU1,b1,A\nA4,RU1,b1,A\n"
-                "B1,RU1,b1,B\nB2,RU1,b1,B\nB3,RU1,b1,B\n"
-                "C1,RU1,b1,C\nC2,RU1,b1,C\nC3,RU1,b1,C\n",
-                "ru,lte_band,nr_band\nRU1,b1,\n",
+                "tc_id,enb,ru,cc location\nA1,2,,A\nA2,2,,A\nB1,1,,A\nC1,1,,C\n",
+                "ru,lte_band,nr_band\nRU1,,\n",
             )
             options = SolveOptions(
-                max_extra_slots=5,
-                min_assigned_cases_per_spec=10,
+                max_extra_slots=0,
+                max_numeric_overage_ratio=10.0,
+                max_numeric_overage_units=10,
+                min_assigned_cases_per_spec=2,
+                max_low_use_merge_combinations=1000000,
                 solver="stdlib",
-                max_low_use_stdlib_candidates=1,
             )
-            candidates = generate_candidates(parsed, support, options)
-            by_location = {
-                candidate.spec["cc location"][0].alternatives[0]: candidate
-                for candidate in candidates
-                if len(candidate.spec.get("cc location", ())) == 1
-                and len(candidate.spec["cc location"][0].alternatives) == 1
-                and candidate.spec["cc location"][0].alternatives[0] in {"A", "B", "C"}
-            }
-            selected = tuple(by_location[location] for location in ("A", "B", "C"))
-            assignments = {
-                index: by_location[parsed.rows[index].raw["cc location"]]
-                for index in range(len(parsed.rows))
-            }
+            evaluator = SolutionEvaluator(parsed, support, options)
+            receiver = candidate_from_spec({"enb": (Token(("2",)),), "ru": (), "cc location": (Token(("A",)),)}, (0, 1), evaluator.coverage_index)
+            movable_low = candidate_from_spec({"enb": (Token(("1",)),), "ru": (), "cc location": (Token(("A",)),)}, (2,), evaluator.coverage_index)
+            blocked_low = candidate_from_spec({"enb": (Token(("1",)),), "ru": (), "cc location": (Token(("C",)),)}, (3,), evaluator.coverage_index)
+            self.assertIsNotNone(receiver)
+            self.assertIsNotNone(movable_low)
+            self.assertIsNotNone(blocked_low)
 
             refinement = _refine_low_use_specs(
-                candidates,
-                Solution(selected, assignments, "OPTIMAL"),
-                SolutionEvaluator(parsed, support, options),
+                Solution(
+                    (receiver, movable_low, blocked_low),
+                    {0: receiver, 1: receiver, 2: movable_low, 3: blocked_low},
+                    "OPTIMAL",
+                ),
+                evaluator,
                 options,
             )
 
             self.assertTrue(refinement.changed)
-            self.assertEqual(1, len(refinement.solution.candidates))
-            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
-            self.assertEqual(10, refinement.evaluation.rows[0].assigned_count)
+            self.assertEqual(1, refinement.evaluation.low_use_spec_count)
+            self.assertIn(
+                "A1 + A2 + B1",
+                [self._tc_ids(parsed, row.assigned_indexes) for row in refinement.evaluation.rows],
+            )
 
-    def test_low_use_evacuation_absorbs_into_receiver_without_borrowing_other_specs(self):
+    def test_low_use_merge_pass_uses_greedy_when_combination_space_is_large(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            parsed, support = self.parsed(
+                Path(tmp),
+                "tc_id,ru,lte band,cc location\n"
+                "A1,RU1,b1,A\nA2,RU1,b1,A\nA3,RU1,b1,A\n"
+                "B1,RU1,b1,B\nB2,RU1,b1,B\nB3,RU1,b1,B\n"
+                "C1,RU1,b1,C\nC2,RU1,b1,C\n",
+                "ru,lte_band,nr_band\nRU1,b1,\n",
+            )
+            options = SolveOptions(
+                max_extra_slots=5,
+                min_assigned_cases_per_spec=3,
+                solver="stdlib",
+                max_low_use_merge_combinations=1,
+            )
+            evaluator = SolutionEvaluator(parsed, support, options)
+            receiver_a = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("A",)),)}, (0, 1, 2), evaluator.coverage_index)
+            receiver_b = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("B",)),)}, (3, 4, 5), evaluator.coverage_index)
+            low_c = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("C",)),)}, (6, 7), evaluator.coverage_index)
+            self.assertIsNotNone(receiver_a)
+            self.assertIsNotNone(receiver_b)
+            self.assertIsNotNone(low_c)
+            selected = (receiver_a, receiver_b, low_c)
+            assignments = {
+                index: (
+                    receiver_a if parsed.rows[index].raw["cc location"] == "A"
+                    else receiver_b if parsed.rows[index].raw["cc location"] == "B"
+                    else low_c
+                )
+                for index in range(len(parsed.rows))
+            }
+
+            refinement = _refine_low_use_specs(
+                Solution(selected, assignments, "OPTIMAL"),
+                evaluator,
+                options,
+            )
+
+            self.assertTrue(refinement.changed)
+            self.assertEqual(2, len(refinement.solution.candidates))
+            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
+            self.assertEqual(8, sum(row.assigned_count for row in refinement.evaluation.rows))
+
+    def test_low_use_merge_pass_absorbs_into_receiver_without_borrowing_other_specs(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
@@ -419,7 +480,6 @@ class DomainSolverTests(unittest.TestCase):
                 max_extra_slots=5,
                 min_assigned_cases_per_spec=2,
                 solver="stdlib",
-                max_low_use_stdlib_candidates=1,
             )
             candidates = generate_candidates(parsed, support, options)
             by_location = {
@@ -440,7 +500,6 @@ class DomainSolverTests(unittest.TestCase):
             }
 
             refinement = _refine_low_use_specs(
-                candidates,
                 Solution(selected, assignments, "OPTIMAL"),
                 SolutionEvaluator(parsed, support, options),
                 options,
@@ -462,106 +521,70 @@ class DomainSolverTests(unittest.TestCase):
                     )
             self.assertEqual(1, len(changed_receivers))
 
-    def test_low_use_evacuation_respects_affordable_excess_cap(self):
+    def test_low_use_merge_pass_ignores_assignment_excess(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
-                "tc_id,ru,lte band,cc location\nT1,RU1,b1,A\nT2,RU1,b1,B\n",
+                "tc_id,ru,lte band,cc location\nA1,RU1,b1,A\nA2,RU1,b1,A\nB1,RU1,b1,B\n",
                 "ru,lte_band,nr_band\nRU1,b1,\n",
             )
-            rejecting_options = SolveOptions(
+            options = SolveOptions(
+                max_extra_slots=5,
                 min_assigned_cases_per_spec=2,
                 solver="stdlib",
-                max_low_use_stdlib_candidates=1,
-                low_use_affordable_excess_per_case=0,
             )
-            candidates = generate_candidates(parsed, support, rejecting_options)
-            selected = tuple(candidate for candidate in candidates if len(candidate.source_indexes) == 1)
-            rejected = _refine_low_use_specs(
-                candidates,
-                Solution(selected, {0: selected[0], 1: selected[1]}, "OPTIMAL"),
-                SolutionEvaluator(parsed, support, rejecting_options),
-                rejecting_options,
+            evaluator = SolutionEvaluator(parsed, support, options)
+            receiver = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("A",)),)}, (0, 1), evaluator.coverage_index)
+            low = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("B",)),)}, (2,), evaluator.coverage_index)
+            self.assertIsNotNone(receiver)
+            self.assertIsNotNone(low)
+            refinement = _refine_low_use_specs(
+                Solution((receiver, low), {0: receiver, 1: receiver, 2: low}, "OPTIMAL"),
+                evaluator,
+                options,
             )
-            self.assertFalse(rejected.changed)
-            self.assertEqual(2, rejected.evaluation.low_use_spec_count)
+            self.assertTrue(refinement.changed)
+            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
+            self.assertGreater(refinement.evaluation.total_assignment_excess, 0)
 
-            accepting_options = SolveOptions(
-                min_assigned_cases_per_spec=2,
-                solver="stdlib",
-                max_low_use_stdlib_candidates=1,
-                low_use_affordable_excess_per_case=1,
-            )
-            accepted = _refine_low_use_specs(
-                generate_candidates(parsed, support, accepting_options),
-                Solution(selected, {0: selected[0], 1: selected[1]}, "OPTIMAL"),
-                SolutionEvaluator(parsed, support, accepting_options),
-                accepting_options,
-            )
-            self.assertTrue(accepted.changed)
-            self.assertEqual(0, accepted.evaluation.low_use_spec_count)
-
-    def test_low_use_evacuation_respects_affordable_equipment_cap(self):
+    def test_low_use_merge_pass_keeps_equipment_within_default_cap(self):
         with tempfile.TemporaryDirectory() as tmp:
-            directory = Path(tmp)
             parsed, support = self.parsed(
-                directory,
-                "tc_id,enb,ru,cc location\nT1,1,,A\nT2,1,,B\n",
+                Path(tmp),
+                "tc_id,enb,ru,cc location\nA1,1,,A\nA2,1,,A\nB1,3,,B\n",
                 "ru,lte_band,nr_band\nRU1,,\n",
             )
+            options = SolveOptions(
+                max_extra_slots=5,
+                max_numeric_overage_ratio=10.0,
+                max_numeric_overage_units=10,
+                min_assigned_cases_per_spec=2,
+                low_use_affordable_equipment_delta=0,
+                solver="stdlib",
+            )
+            evaluator = SolutionEvaluator(parsed, support, options)
+            receiver = candidate_from_spec({"enb": (Token(("1",)),), "ru": (), "cc location": (Token(("A",)),)}, (0, 1), evaluator.coverage_index)
+            low = candidate_from_spec({"enb": (Token(("3",)),), "ru": (), "cc location": (Token(("B",)),)}, (2,), evaluator.coverage_index)
+            self.assertIsNotNone(receiver)
+            self.assertIsNotNone(low)
+            starting = evaluator.evaluate((receiver, low), {0: receiver, 1: receiver, 2: low})
+            refinement = _refine_low_use_specs(
+                Solution((receiver, low), {0: receiver, 1: receiver, 2: low}, "OPTIMAL"),
+                evaluator,
+                options,
+            )
+            self.assertTrue(refinement.changed)
+            self.assertLessEqual(refinement.evaluation.total_equipment, starting.total_equipment)
+            self.assertEqual(0, refinement.evaluation.low_use_spec_count)
 
-            def run_with(equipment_delta: int):
-                options = SolveOptions(
-                    min_assigned_cases_per_spec=2,
-                    max_extra_slots=0,
-                    max_numeric_overage_ratio=10.0,
-                    max_numeric_overage_units=10,
-                    solver="stdlib",
-                    max_low_use_stdlib_candidates=1,
-                    low_use_affordable_equipment_delta=equipment_delta,
-                )
-                evaluator = SolutionEvaluator(parsed, support, options)
-                exact_candidates = generate_candidates(parsed, support, options)
-                broad = candidate_from_spec(
-                    {
-                        "enb": (Token(("3",)),),
-                        "ru": (),
-                        "cc location": (Token(("any",)),),
-                    },
-                    (),
-                    evaluator.coverage_index,
-                )
-                self.assertIsNotNone(broad)
-                selected = tuple(candidate for candidate in exact_candidates if len(candidate.source_indexes) == 1)
-                return _refine_low_use_specs(
-                    exact_candidates + (broad,),
-                    Solution(selected, {0: selected[0], 1: selected[1]}, "OPTIMAL"),
-                    evaluator,
-                    options,
-                )
-
-            rejected = run_with(0)
-            self.assertFalse(rejected.changed)
-            self.assertEqual(2, rejected.evaluation.low_use_spec_count)
-
-            accepted = run_with(1)
-            self.assertTrue(accepted.changed)
-            self.assertEqual(0, accepted.evaluation.low_use_spec_count)
-            self.assertEqual(1, len(accepted.solution.candidates))
-
-    def test_low_use_refinement_candidate_cap_marks_result_incomplete(self):
+    def test_low_use_refinement_deduplicates_selected_specs(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
                 "tc_id,ru,lte band\nT1,RU1,b1\nT2,RU1,b1\n",
                 "ru,lte_band,nr_band\nRU1,b1,\n",
             )
-            options = SolveOptions(
-                min_assigned_cases_per_spec=2,
-                max_low_use_refinement_candidates=1,
-                solver="stdlib",
-            )
-            candidates = generate_candidates(parsed, support, options)
+            options = SolveOptions(min_assigned_cases_per_spec=2, solver="stdlib")
             selected = tuple(
                 Candidate(
                     f"duplicate-{index}",
@@ -574,55 +597,47 @@ class DomainSolverTests(unittest.TestCase):
                 for index in range(2)
             )
             refinement = _refine_low_use_specs(
-                candidates + selected,
                 Solution(selected, {0: selected[0], 1: selected[0]}, "OPTIMAL"),
                 SolutionEvaluator(parsed, support, options),
                 options,
             )
 
-            self.assertFalse(refinement.completed)
+            self.assertTrue(refinement.completed)
             self.assertTrue(refinement.changed)
             self.assertEqual(1, len(refinement.solution.candidates))
-            self.assertEqual("FEASIBLE_TIMEOUT", _solution_with_low_use_status(refinement, options).status)
+            self.assertEqual("FEASIBLE_LOW_USE_REFINED", _solution_with_low_use_status(refinement, options).status)
 
-    def test_low_use_evacuation_timeout_preserves_accepted_move(self):
+    def test_low_use_merge_pass_timeout_preserves_accepted_move(self):
         with tempfile.TemporaryDirectory() as tmp:
             parsed, support = self.parsed(
                 Path(tmp),
-                "tc_id,ru,lte band,cc location\nT1,RU1,b1,A\nT2,RU1,b1,B\n",
+                "tc_id,ru,lte band,cc location\nA1,RU1,b1,A\nA2,RU1,b1,A\nB1,RU1,b1,B\n",
                 "ru,lte_band,nr_band\nRU1,b1,\n",
             )
             options = SolveOptions(
-                max_merge_width=5,
+                max_extra_slots=5,
                 min_assigned_cases_per_spec=2,
                 solver="stdlib",
-                max_low_use_stdlib_candidates=1,
             )
-            candidates = generate_candidates(parsed, support, options)
-            selected = tuple(
-                sorted(
-                    (candidate for candidate in candidates if candidate.source_indexes in {(0,), (1,)}),
-                    key=lambda candidate: candidate.source_indexes,
-                )
-            )
-            assignments = {0: selected[0], 1: selected[1]}
             evaluator = SolutionEvaluator(parsed, support, options)
+            receiver = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("A",)),)}, (0, 1), evaluator.coverage_index)
+            low = candidate_from_spec({"ru": (Token(("RU1",)),), "lte band": (Token(("b1",)),), "cc location": (Token(("B",)),)}, (2,), evaluator.coverage_index)
+            self.assertIsNotNone(receiver)
+            self.assertIsNotNone(low)
+            selected = (receiver, low)
+            assignments = {0: receiver, 1: receiver, 2: low}
             starting_evaluation = evaluator.evaluate(selected, assignments)
-            starting_low_assignments = solver_module._low_use_starting_assignments(starting_evaluation, options)
-            move, _completed = solver_module._best_affordable_evacuation_move(
-                candidates,
+            move, _completed = solver_module._best_receiver_merge_move(
                 starting_evaluation,
                 starting_evaluation,
-                starting_low_assignments,
                 evaluator,
                 options,
                 deadline=None,
             )
             self.assertIsNotNone(move)
 
-            with patch("test_line_solver.solver._best_affordable_evacuation_move", return_value=(move, False)):
+            with patch("test_line_solver.solver._best_receiver_merge_move", return_value=(move, False)):
                 refinement = _refine_low_use_specs(
-                    candidates,
                     Solution(selected, assignments, "OPTIMAL"),
                     evaluator,
                     options,
@@ -635,56 +650,6 @@ class DomainSolverTests(unittest.TestCase):
             self.assertEqual("FEASIBLE_TIMEOUT", status_solution.status)
             self.assertEqual("OPTIMAL", status_solution.main_status)
             self.assertEqual("FEASIBLE_TIMEOUT", status_solution.refinement_status)
-
-    def test_rejected_exact_low_use_polish_marks_result_incomplete(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            parsed, support = self.parsed(
-                Path(tmp),
-                "tc_id,ru,lte band,cc location\nT1,RU1,b1,A\nT2,RU1,b1,B\n",
-                "ru,lte_band,nr_band\nRU1,b1,\n",
-            )
-            options = SolveOptions(max_merge_width=5, min_assigned_cases_per_spec=2, solver="stdlib")
-            candidates = generate_candidates(parsed, support, options)
-            selected = tuple(
-                sorted(
-                    (candidate for candidate in candidates if candidate.source_indexes in {(0,), (1,)}),
-                    key=lambda candidate: candidate.source_indexes,
-                )
-            )
-            assignments = {0: selected[0], 1: selected[1]}
-            evaluator = SolutionEvaluator(parsed, support, options)
-            starting_evaluation = evaluator.evaluate(selected, assignments)
-            starting_low_assignments = solver_module._low_use_starting_assignments(starting_evaluation, options)
-            incumbent, _completed = solver_module._best_affordable_evacuation_move(
-                candidates,
-                starting_evaluation,
-                starting_evaluation,
-                starting_low_assignments,
-                evaluator,
-                options,
-                deadline=None,
-            )
-            self.assertIsNotNone(incumbent)
-
-            rejected = solver_module._ExactLowUseResult(
-                selected,
-                assignments,
-                starting_evaluation,
-                completed=True,
-            )
-            result = solver_module._better_exact_result(
-                rejected,
-                incumbent.evaluation,
-                incumbent.assignments,
-                starting_evaluation,
-                starting_low_assignments,
-                evaluator,
-                options,
-            )
-
-            self.assertFalse(result.completed)
-            self.assertEqual(incumbent.evaluation.low_use_spec_count, result.evaluation.low_use_spec_count)
-            self.assertEqual(incumbent.assignments, result.assignments)
 
     def test_output_honors_explicit_solution_assignments(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -736,7 +701,6 @@ class DomainSolverTests(unittest.TestCase):
             candidate = Candidate("a", spec, (0,), 1, frozenset({0}), {0: 0})
             options = SolveOptions(min_assigned_cases_per_spec=10)
             refinement = _refine_low_use_specs(
-                (candidate,),
                 Solution((candidate,), {0: candidate}, "OPTIMAL"),
                 SolutionEvaluator(parsed, support, options),
                 options,

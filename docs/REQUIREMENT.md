@@ -36,13 +36,12 @@ count is optimized.
 
 A selected spec assigned fewer than 10 testcases is considered low-use by
 default. Low-use specs are undesirable, not invalid. Low-use refinement should
-try to merge or replace low-use specs until none remain when feasible. If
-eliminating low-use specs requires extra equipment or assignment excess, choose
-the lowest-cost refined solution after minimizing low-use count and deficit.
-The refinement must first run a fast affordable evacuation pass that commits
-improving moves immediately, then may use exact bounded optimization only as
-optional polishing. If the pool is capped or proof times out, the solver must
-keep the best valid refined solution found and report timeout-style status.
+try to merge low-use testcase assignments into existing non-low receiver specs
+until none remain when feasible. The refinement pass is a fast low-use merge
+pass: it broadens receiver specs directly from exact testcase requirements,
+uses exact receiver assignment only for small search spaces, and uses greedy
+iteration for larger spaces. It does not prove the best possible refinement,
+does not scan generated candidates, and ignores assignment excess.
 
 The first rewrite milestone only needs to read the input CSV files and parse
 their cells into normalized requirement tokens.
@@ -320,23 +319,16 @@ Output formatting rules:
   dedicated positive timeout after the primary solver returns. When omitted,
   refinement uses the remaining `--timeout` budget.
 - `--refine-output PATH` skips the primary optimizer, imports selected specs
-  from an existing output CSV, regenerates candidates from the current input and
-  RU-band support, runs only low-use refinement, and writes a new output CSV.
-  It cannot be used with `--parse-only` or with low-use refinement disabled.
-- `--max-low-use-refinement-candidates N` caps the bounded low-use refinement
-  candidate pool. The default is `5000`; `N` must be a positive integer.
-- `--max-low-use-merge-depth N` caps merge-closure depth for low-use refinement
-  candidates anchored to an original low-use spec. The default is `8`; `N` must
-  be a positive integer.
-- `--max-low-use-stdlib-candidates N` caps when the standard-library exact
-  low-use refinement fallback is allowed to prove optimality without OR-Tools.
-  The default is `300`; `N` must be a positive integer.
+  from an existing output CSV, rebuilds coverage and assignment from the current
+  input and RU-band support, runs only low-use refinement, and writes a new
+  output CSV. It cannot be used with `--parse-only` or with low-use refinement
+  disabled.
+- `--max-low-use-merge-combinations N` caps when the fast low-use merge pass
+  enumerates all receiver assignments exactly. The default is `1000000`; larger
+  spaces use greedy iteration. `N` must be a positive integer.
 - `--low-use-affordable-equipment-delta N` caps cumulative equipment increase
-  allowed during fast low-use evacuation. The default is `0`; `N` must be zero
+  allowed during the fast low-use merge pass. The default is `0`; `N` must be zero
   or a positive integer.
-- `--low-use-affordable-excess-per-case N` caps cumulative assignment-excess
-  increase per testcase row evacuated from its original low-use spec. The
-  default is `3`; `N` must be zero or a positive integer.
 - The CLI should print progress messages and final elapsed time to stderr so
   stdout remains usable for `--parse-only` JSON output.
 
@@ -394,17 +386,14 @@ Default performance behavior:
 - When low-use analysis is enabled and completes without changing the primary
   solution, output that solution with `solve_status` set to
   `FEASIBLE_LOW_USE_CHECKED`.
-- When the primary solution is improved by the bounded low-use refinement pass,
+- When the primary solution is improved by the fast low-use merge pass,
   output that solution with `solve_status` set to
   `FEASIBLE_LOW_USE_REFINED`.
 - `OPTIMAL` means optimal over the generated candidate pool under the primary
   guardrails and budgets, not over every theoretical possible spec. Low-use
-  refinement prioritizes preserving fast affordable improvements. Exact
-  low-use polishing proves optimality only over the completed bounded
-  refinement pool. If low-use refinement candidate generation is capped,
-  OR-Tools or the standard-library fallback cannot prove optimality, or the
-  refinement timeout expires, the final status must be timeout-style rather
-  than claiming proven low-use optimality.
+  refinement prioritizes fast useful improvement over proof. If the refinement
+  timeout expires, the final status must be timeout-style while preserving any
+  accepted improvements.
 
 ## First Milestone Expected Output
 
@@ -503,17 +492,13 @@ excess is minimized before selected spec count. A score of `1` is enough for an
 exact same-equipment assignment to beat a broader assignment before the solver
 tries to reduce the number of selected specs.
 
-Low-use handling is applied as a bounded post-solve refinement objective. During
-that refinement, reducing low-use selected specs and low-use deficit is primary;
-equipment count and final assignment excess deltas from the starting solution
-are then minimized as the extra cost of the low-use reduction. The refinement
-optimizer must model testcase assignment directly so low-use counts, deficits,
-and output `assigned_count` values describe the optimized assignments rather
-than a separate greedy post-processing pass.
-The fast evacuation pass only moves testcase rows assigned to low-use specs,
-except that replacing an existing receiver with a merged receiver may preserve
-that receiver's current assignments. It must not borrow unrelated non-low
-assignments merely to make a new receiver reach the low-use threshold.
+Low-use handling is applied as a fast post-solve merge pass. During refinement,
+reducing low-use selected specs and low-use deficit is primary, then cumulative
+equipment delta from the starting solution is minimized. Assignment excess is
+ignored during this pass. The pass only moves testcase rows assigned to low-use
+specs into existing non-low receiver specs. Replacing a receiver with a broader
+merged receiver preserves that receiver's current assignments. If no non-low
+receiver exists, assigned low-use specs are left unchanged.
 
 Example:
 

@@ -133,9 +133,7 @@ class CliTests(unittest.TestCase):
             input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
             support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
             cases = (
-                ("--max-low-use-refinement-candidates", "--max-low-use-refinement-candidates must be a positive integer"),
-                ("--max-low-use-merge-depth", "--max-low-use-merge-depth must be a positive integer"),
-                ("--max-low-use-stdlib-candidates", "--max-low-use-stdlib-candidates must be a positive integer"),
+                ("--max-low-use-merge-combinations", "--max-low-use-merge-combinations must be a positive integer"),
             )
             for option, message in cases:
                 stderr = io.StringIO()
@@ -151,7 +149,6 @@ class CliTests(unittest.TestCase):
             support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
             cases = (
                 ("--low-use-affordable-equipment-delta", "--low-use-affordable-equipment-delta must be zero or a positive integer"),
-                ("--low-use-affordable-excess-per-case", "--low-use-affordable-excess-per-case must be zero or a positive integer"),
             )
             for option, message in cases:
                 stderr = io.StringIO()
