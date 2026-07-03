@@ -29,6 +29,8 @@ OUTPUT_METADATA_COLUMNS = frozenset(
         "covered_count",
         "equipment_count",
         "solve_status",
+        "main_solve_status",
+        "low_use_refinement_status",
         "assigned_tc_ids",
         "assigned_count",
     }
@@ -64,6 +66,13 @@ class _ExactLowUseResult:
     assignments: dict[int, Candidate]
     evaluation: SolutionEvaluation
     completed: bool
+
+
+@dataclass(frozen=True)
+class _EvacuationMove:
+    candidates: tuple[Candidate, ...]
+    assignments: dict[int, Candidate]
+    evaluation: SolutionEvaluation
 
 
 def solve_to_csv(parsed: ParsedCsv, support: SupportTable, output_path: Path, options: SolveOptions) -> None:
@@ -113,6 +122,7 @@ def refine_output_to_csv(
         candidates=imported_candidates,
         assignments=_assign_candidates(imported_candidates, len(parsed.rows)),
         status="OPTIMAL",
+        main_status="IMPORTED",
     )
     try:
         evaluator.evaluate(solution.candidates)
@@ -246,15 +256,54 @@ def _refine_low_use_specs(
     if deadline is not None and not _has_refinement_time(deadline):
         return _LowUseRefinement(best_solution, best_evaluation, changed=False, completed=False)
 
+    starting_solution = best_solution
+    starting_evaluation = best_evaluation
+    starting_low_assignments = _low_use_starting_assignments(starting_evaluation, options)
+    evacuation = _evacuate_low_use_specs(
+        candidates,
+        best_solution,
+        best_evaluation,
+        starting_evaluation,
+        starting_low_assignments,
+        evaluator,
+        options,
+        deadline,
+    )
+    best_solution = Solution(
+        evacuation.candidates,
+        evacuation.assignments,
+        solution.status,
+        solution.main_status,
+        solution.refinement_status,
+    )
+    best_evaluation = evacuation.evaluation
+
+    if deadline is not None and not _has_refinement_time(deadline):
+        changed = _solution_changed(starting_solution, evacuation)
+        return _LowUseRefinement(best_solution, best_evaluation, changed=changed, completed=False)
+
     pool = _build_low_use_refinement_pool(candidates, best_evaluation, evaluator, options, deadline)
-    result = _optimize_low_use_pool(pool.candidates, best_evaluation, evaluator, options, deadline)
-    changed = _solution_changed(best_solution, result)
-    refined_solution = Solution(result.candidates, result.assignments, solution.status)
+    result = _optimize_low_use_pool(
+        pool.candidates,
+        best_evaluation,
+        starting_evaluation,
+        starting_low_assignments,
+        evaluator,
+        options,
+        deadline,
+    )
+    refined_solution = Solution(
+        result.candidates,
+        result.assignments,
+        solution.status,
+        solution.main_status,
+        solution.refinement_status,
+    )
     return _LowUseRefinement(
         refined_solution,
         result.evaluation,
-        changed=changed,
-        completed=pool.completed and result.completed,
+        changed=_solution_changed(starting_solution, result),
+        completed=pool.completed and result.completed and evacuation.completed,
     )
 
 
@@ -347,53 +396,428 @@ def _evaluated_group_mask(candidate: Candidate, evaluator: SolutionEvaluator) ->
     return evaluator._evaluate_candidate(candidate).coverage.group_mask
 
 
-def _optimize_low_use_pool(
+def _evacuate_low_use_specs(
     candidates: tuple[Candidate, ...],
+    solution: Solution,
+    evaluation: SolutionEvaluation,
     starting_evaluation: SolutionEvaluation,
+    starting_low_assignments: dict[int, str],
     evaluator: SolutionEvaluator,
     options: SolveOptions,
     deadline: float | None,
 ) -> _ExactLowUseResult:
+    current_solution = solution
+    current_evaluation = evaluation
+    completed = True
+
+    while current_evaluation.low_use_spec_count:
+        if deadline is not None and not _has_refinement_time(deadline):
+            completed = False
+            break
+        move, move_completed = _best_affordable_evacuation_move(
+            candidates,
+            current_evaluation,
+            starting_evaluation,
+            starting_low_assignments,
+            evaluator,
+            options,
+            deadline,
+        )
+        completed = completed and move_completed
+        if move is None:
+            break
+        current_solution = Solution(
+            move.candidates,
+            move.assignments,
+            current_solution.status,
+            current_solution.main_status,
+            current_solution.refinement_status,
+        )
+        current_evaluation = move.evaluation
+
+    return _ExactLowUseResult(
+        candidates=current_solution.candidates,
+        assignments=current_solution.assignments,
+        evaluation=current_evaluation,
+        completed=completed,
+    )
+
+
+def _best_affordable_evacuation_move(
+    candidates: tuple[Candidate, ...],
+    evaluation: SolutionEvaluation,
+    starting_evaluation: SolutionEvaluation,
+    starting_low_assignments: dict[int, str],
+    evaluator: SolutionEvaluator,
+    options: SolveOptions,
+    deadline: float | None,
+) -> tuple[_EvacuationMove | None, bool]:
+    current_candidates = tuple(row.evaluated.candidate for row in evaluation.rows)
+    current_assignments = _assignments_from_evaluation(evaluation)
+    low_rows = tuple(row for row in evaluation.rows if row.assigned_count < options.min_assigned_cases_per_spec)
+    low_signatures = {row.evaluated.candidate.signature for row in low_rows}
+    non_low_rows = tuple(row for row in evaluation.rows if row.evaluated.candidate.signature not in low_signatures)
+    selected_signatures = {candidate.signature for candidate in current_candidates}
+    best_move: _EvacuationMove | None = None
+    best_objective: tuple[int, int, int, int, int, tuple[str, ...]] | None = None
+    completed = True
+
+    def consider(trial_candidates: tuple[Candidate, ...], trial_assignments: dict[int, Candidate]) -> bool:
+        nonlocal best_move, best_objective, completed
+        if deadline is not None and not _has_refinement_time(deadline):
+            completed = False
+            return False
+        try:
+            trial_evaluation = evaluator.evaluate(trial_candidates, trial_assignments)
+        except ValueError:
+            return True
+        if (trial_evaluation.low_use_spec_count, trial_evaluation.low_use_deficit) >= (
+            evaluation.low_use_spec_count,
+            evaluation.low_use_deficit,
+        ):
+            return True
+        if not _result_is_affordable(trial_evaluation, trial_assignments, starting_evaluation, starting_low_assignments, options):
+            return True
+        objective = _evacuation_objective(trial_evaluation, starting_evaluation)
+        if best_objective is None or objective < best_objective:
+            best_objective = objective
+            best_move = _EvacuationMove(trial_candidates, trial_assignments, trial_evaluation)
+        return True
+
+    for low_row in low_rows:
+        low_candidate = low_row.evaluated.candidate
+        if not low_row.assigned_indexes:
+            trial_candidates = _replace_selected_candidates(current_candidates, {low_candidate.signature}, ())
+            if not consider(trial_candidates, dict(current_assignments)):
+                return best_move, completed
+
+    for low_row in low_rows:
+        if not low_row.assigned_indexes:
+            continue
+        trial = _assign_low_row_to_existing_receivers(low_row, non_low_rows, current_candidates, current_assignments, evaluator)
+        if trial is not None and not consider(*trial):
+            return best_move, completed
+
+    for low_row in low_rows:
+        for receiver_row in non_low_rows:
+            trial = _merge_low_row_into_receiver(low_row, receiver_row, current_candidates, current_assignments, evaluator)
+            if trial is not None and not consider(*trial):
+                return best_move, completed
+
+    for left_index, left_row in enumerate(low_rows):
+        for right_row in low_rows[left_index + 1 :]:
+            trial = _merge_low_rows(left_row, right_row, current_candidates, current_assignments, evaluator)
+            if trial is not None and not consider(*trial):
+                return best_move, completed
+
+    generated = _generated_evacuation_candidates(candidates, low_rows, selected_signatures, evaluator, options, deadline)
+    completed = completed and generated.completed
+    for candidate in generated.candidates:
+        trial = _replace_low_rows_with_generated_candidate(candidate, low_rows, current_candidates, current_assignments, evaluator)
+        if trial is not None and not consider(*trial):
+            return best_move, completed
+
+    return best_move, completed
+
+
+def _assign_low_row_to_existing_receivers(
+    low_row,
+    receiver_rows,
+    current_candidates: tuple[Candidate, ...],
+    current_assignments: dict[int, Candidate],
+    evaluator: SolutionEvaluator,
+) -> tuple[tuple[Candidate, ...], dict[int, Candidate]] | None:
+    if not receiver_rows:
+        return None
+    trial_assignments = dict(current_assignments)
+    for testcase_index in low_row.assigned_indexes:
+        group_index = evaluator.coverage_index.row_to_group[testcase_index]
+        covering = [
+            row
+            for row in receiver_rows
+            if row.evaluated.coverage.group_mask & (1 << group_index)
+        ]
+        if not covering:
+            return None
+        receiver = min(
+            covering,
+            key=lambda row: (
+                row.evaluated.coverage.excess_by_group.get(group_index, 0),
+                equipment_count(row.evaluated.spec),
+                row.evaluated.output_signature,
+            ),
+        )
+        trial_assignments[testcase_index] = receiver.evaluated.candidate
+    return (
+        _replace_selected_candidates(current_candidates, {low_row.evaluated.candidate.signature}, ()),
+        trial_assignments,
+    )
+
+
+def _merge_low_row_into_receiver(
+    low_row,
+    receiver_row,
+    current_candidates: tuple[Candidate, ...],
+    current_assignments: dict[int, Candidate],
+    evaluator: SolutionEvaluator,
+) -> tuple[tuple[Candidate, ...], dict[int, Candidate]] | None:
+    merged = _merged_candidate(low_row.evaluated.candidate, receiver_row.evaluated.candidate, evaluator)
+    if merged is None:
+        return None
+    removed = {low_row.evaluated.candidate.signature, receiver_row.evaluated.candidate.signature}
+    trial_assignments = dict(current_assignments)
+    for testcase_index, assigned_candidate in current_assignments.items():
+        if assigned_candidate.signature in removed:
+            trial_assignments[testcase_index] = merged
+    return _replace_selected_candidates(current_candidates, removed, (merged,)), trial_assignments
+
+
+def _merge_low_rows(
+    left_row,
+    right_row,
+    current_candidates: tuple[Candidate, ...],
+    current_assignments: dict[int, Candidate],
+    evaluator: SolutionEvaluator,
+) -> tuple[tuple[Candidate, ...], dict[int, Candidate]] | None:
+    merged = _merged_candidate(left_row.evaluated.candidate, right_row.evaluated.candidate, evaluator)
+    if merged is None:
+        return None
+    removed = {left_row.evaluated.candidate.signature, right_row.evaluated.candidate.signature}
+    trial_assignments = dict(current_assignments)
+    for testcase_index, assigned_candidate in current_assignments.items():
+        if assigned_candidate.signature in removed:
+            trial_assignments[testcase_index] = merged
+    return _replace_selected_candidates(current_candidates, removed, (merged,)), trial_assignments
+
+
+def _replace_low_rows_with_generated_candidate(
+    candidate: Candidate,
+    low_rows,
+    current_candidates: tuple[Candidate, ...],
+    current_assignments: dict[int, Candidate],
+    evaluator: SolutionEvaluator,
+) -> tuple[tuple[Candidate, ...], dict[int, Candidate]] | None:
+    covered_low_rows = [
+        row
+        for row in low_rows
+        if row.assigned_indexes and _candidate_covers_indexes(candidate, row.assigned_indexes, evaluator)
+    ]
+    if not covered_low_rows:
+        return None
+    removed = {row.evaluated.candidate.signature for row in covered_low_rows}
+    trial_assignments = dict(current_assignments)
+    for row in covered_low_rows:
+        for testcase_index in row.assigned_indexes:
+            trial_assignments[testcase_index] = candidate
+    return _replace_selected_candidates(current_candidates, removed, (candidate,)), trial_assignments
+
+
+def _generated_evacuation_candidates(
+    candidates: tuple[Candidate, ...],
+    low_rows,
+    selected_signatures: set[str],
+    evaluator: SolutionEvaluator,
+    options: SolveOptions,
+    deadline: float | None,
+) -> _LowUseCandidatePool:
+    low_group_mask = 0
+    for row in low_rows:
+        for testcase_index in row.assigned_indexes:
+            low_group_mask |= 1 << evaluator.coverage_index.row_to_group[testcase_index]
+    if not low_group_mask:
+        return _LowUseCandidatePool((), completed=True)
+    completed = True
+    generated: list[tuple[tuple[int, int, int, str], Candidate]] = []
+    for candidate in candidates:
+        if deadline is not None and not _has_refinement_time(deadline):
+            completed = False
+            break
+        if candidate.signature in selected_signatures:
+            continue
+        group_mask = _evaluated_group_mask(candidate, evaluator)
+        if group_mask & low_group_mask:
+            if deadline is not None and not _has_refinement_time(deadline):
+                completed = False
+                break
+            generated.append((_evacuation_candidate_key(candidate, low_group_mask, evaluator), candidate))
+    if len(generated) > options.max_low_use_refinement_candidates:
+        completed = False
+    generated.sort(key=lambda item: item[0])
+    if deadline is not None and not _has_refinement_time(deadline):
+        completed = False
+    return _LowUseCandidatePool(
+        candidates=tuple(candidate for _key, candidate in generated[: options.max_low_use_refinement_candidates]),
+        completed=completed,
+    )
+
+
+def _evacuation_candidate_key(candidate: Candidate, low_group_mask: int, evaluator: SolutionEvaluator) -> tuple[int, int, int, str]:
+    evaluated = evaluator._evaluate_candidate(candidate)
+    covered_low_mask = evaluated.coverage.group_mask & low_group_mask
+    excess = sum(
+        evaluator.coverage_index.groups[group_index].weight * evaluated.coverage.excess_by_group.get(group_index, 0)
+        for group_index in _iter_bits(covered_low_mask)
+    )
+    return (
+        equipment_count(evaluated.spec),
+        excess,
+        -covered_low_mask.bit_count(),
+        evaluated.output_signature,
+    )
+
+
+def _candidate_covers_indexes(candidate: Candidate, indexes: tuple[int, ...], evaluator: SolutionEvaluator) -> bool:
+    evaluated = evaluator._evaluate_candidate(candidate)
+    for testcase_index in indexes:
+        group_index = evaluator.coverage_index.row_to_group[testcase_index]
+        if not evaluated.coverage.group_mask & (1 << group_index):
+            return False
+    return True
+
+
+def _replace_selected_candidates(
+    current_candidates: tuple[Candidate, ...],
+    removed_signatures: set[str],
+    additions: tuple[Candidate, ...],
+) -> tuple[Candidate, ...]:
+    by_signature = {
+        candidate.signature: candidate
+        for candidate in current_candidates
+        if candidate.signature not in removed_signatures
+    }
+    for candidate in additions:
+        by_signature[candidate.signature] = candidate
+    return tuple(by_signature[signature] for signature in sorted(by_signature))
+
+
+def _low_use_starting_assignments(evaluation: SolutionEvaluation, options: SolveOptions) -> dict[int, str]:
+    assignments: dict[int, str] = {}
+    for row in evaluation.rows:
+        if row.assigned_count >= options.min_assigned_cases_per_spec:
+            continue
+        for testcase_index in row.assigned_indexes:
+            assignments[testcase_index] = row.evaluated.candidate.signature
+    return assignments
+
+
+def _result_is_affordable(
+    evaluation: SolutionEvaluation,
+    assignments: dict[int, Candidate],
+    starting_evaluation: SolutionEvaluation,
+    starting_low_assignments: dict[int, str],
+    options: SolveOptions,
+) -> bool:
+    equipment_delta = evaluation.total_equipment - starting_evaluation.total_equipment
+    if equipment_delta > options.low_use_affordable_equipment_delta:
+        return False
+    assignment_excess_delta = evaluation.total_assignment_excess - starting_evaluation.total_assignment_excess
+    evacuated_count = _evacuated_case_count(assignments, starting_low_assignments)
+    return assignment_excess_delta <= evacuated_count * options.low_use_affordable_excess_per_case
+
+
+def _evacuated_case_count(assignments: dict[int, Candidate], starting_low_assignments: dict[int, str]) -> int:
+    return sum(
+        1
+        for testcase_index, original_signature in starting_low_assignments.items()
+        if assignments[testcase_index].signature != original_signature
+    )
+
+
+def _evacuation_objective(
+    evaluation: SolutionEvaluation,
+    starting_evaluation: SolutionEvaluation,
+) -> tuple[int, int, int, int, int, tuple[str, ...]]:
+    return (
+        evaluation.low_use_spec_count,
+        evaluation.low_use_deficit,
+        evaluation.total_equipment - starting_evaluation.total_equipment,
+        evaluation.total_assignment_excess - starting_evaluation.total_assignment_excess,
+        evaluation.selected_spec_count,
+        tuple(sorted(row.evaluated.output_signature for row in evaluation.rows)),
+    )
+
+
+def _optimize_low_use_pool(
+    candidates: tuple[Candidate, ...],
+    incumbent_evaluation: SolutionEvaluation,
+    starting_evaluation: SolutionEvaluation,
+    starting_low_assignments: dict[int, str],
+    evaluator: SolutionEvaluator,
+    options: SolveOptions,
+    deadline: float | None,
+) -> _ExactLowUseResult:
+    incumbent_assignments = _assignments_from_evaluation(incumbent_evaluation)
     if options.solver != "stdlib":
         try:
             result = _optimize_low_use_pool_with_ortools(candidates, evaluator, options, deadline)
         except ImportError:
             result = None
         if result is not None:
-            return _better_exact_result(result, starting_evaluation, evaluator)
+            return _better_exact_result(
+                result,
+                incumbent_evaluation,
+                incumbent_assignments,
+                starting_evaluation,
+                starting_low_assignments,
+                evaluator,
+                options,
+            )
 
     if len(candidates) <= options.max_low_use_stdlib_candidates:
         return _better_exact_result(
             _optimize_low_use_pool_stdlib(candidates, evaluator, options, deadline),
+            incumbent_evaluation,
+            incumbent_assignments,
             starting_evaluation,
+            starting_low_assignments,
             evaluator,
+            options,
         )
 
-    starting_candidates = tuple(row.evaluated.candidate for row in starting_evaluation.rows)
-    starting_assignments = _assignments_from_evaluation(starting_evaluation)
+    incumbent_candidates = tuple(row.evaluated.candidate for row in incumbent_evaluation.rows)
     return _ExactLowUseResult(
-        candidates=starting_candidates,
-        assignments=starting_assignments,
-        evaluation=starting_evaluation,
+        candidates=incumbent_candidates,
+        assignments=incumbent_assignments,
+        evaluation=incumbent_evaluation,
         completed=False,
     )
 
 
 def _better_exact_result(
     result: _ExactLowUseResult,
+    incumbent_evaluation: SolutionEvaluation,
+    incumbent_assignments: dict[int, Candidate],
     starting_evaluation: SolutionEvaluation,
+    starting_low_assignments: dict[int, str],
     evaluator: SolutionEvaluator,
+    options: SolveOptions,
 ) -> _ExactLowUseResult:
-    if _low_use_refinement_objective(result.evaluation) <= _low_use_refinement_objective(starting_evaluation):
+    if (
+        _low_use_refinement_objective(result.evaluation) <= _low_use_refinement_objective(incumbent_evaluation)
+        and _result_is_affordable(result.evaluation, result.assignments, starting_evaluation, starting_low_assignments, options)
+        and _keeps_non_low_assignments(result.assignments, incumbent_assignments, starting_low_assignments)
+    ):
         return result
-    starting_candidates = tuple(row.evaluated.candidate for row in starting_evaluation.rows)
-    starting_assignments = _assignments_from_evaluation(starting_evaluation)
+    incumbent_candidates = tuple(row.evaluated.candidate for row in incumbent_evaluation.rows)
     return _ExactLowUseResult(
-        candidates=starting_candidates,
-        assignments=starting_assignments,
-        evaluation=evaluator.evaluate(starting_candidates, starting_assignments),
-        completed=result.completed,
+        candidates=incumbent_candidates,
+        assignments=incumbent_assignments,
+        evaluation=evaluator.evaluate(incumbent_candidates, incumbent_assignments),
+        completed=False,
     )
+
+
+def _keeps_non_low_assignments(
+    result_assignments: dict[int, Candidate],
+    incumbent_assignments: dict[int, Candidate],
+    starting_low_assignments: dict[int, str],
+) -> bool:
+    for testcase_index, incumbent_candidate in incumbent_assignments.items():
+        if testcase_index in starting_low_assignments:
+            continue
+        if result_assignments[testcase_index].signature != incumbent_candidate.signature:
+            return False
+    return True
 
 
 def _optimize_low_use_pool_stdlib(
@@ -703,25 +1127,39 @@ def _assign_candidates(candidates: tuple[Candidate, ...], testcase_count: int) -
 
 def _solution_for_candidates(original: Solution, candidates: tuple[Candidate, ...], evaluator: SolutionEvaluator) -> Solution:
     if {candidate.signature for candidate in candidates} == {candidate.signature for candidate in original.candidates}:
-        return Solution(candidates, original.assignments, original.status)
+        return Solution(candidates, original.assignments, original.status, original.main_status, original.refinement_status)
     return Solution(
         candidates=candidates,
         assignments=_assign_candidates(candidates, len(evaluator.parsed.rows)),
         status=original.status,
+        main_status=original.main_status,
+        refinement_status=original.refinement_status,
     )
 
 
 def _solution_with_low_use_status(refinement: _LowUseRefinement, options: SolveOptions) -> Solution:
     solution = refinement.solution
+    main_status = solution.main_status or solution.status
+    refinement_status = _low_use_refinement_status(refinement, options)
     if options.min_assigned_cases_per_spec <= 0:
-        return solution
+        return Solution(solution.candidates, solution.assignments, solution.status, main_status, refinement_status)
     if solution.status == "FEASIBLE_TIMEOUT" or not refinement.completed:
         status = "FEASIBLE_TIMEOUT"
     elif refinement.changed:
         status = "FEASIBLE_LOW_USE_REFINED"
     else:
         status = "FEASIBLE_LOW_USE_CHECKED"
-    return Solution(solution.candidates, solution.assignments, status)
+    return Solution(solution.candidates, solution.assignments, status, main_status, refinement_status)
+
+
+def _low_use_refinement_status(refinement: _LowUseRefinement, options: SolveOptions) -> str:
+    if options.min_assigned_cases_per_spec <= 0:
+        return "DISABLED"
+    if not refinement.completed:
+        return "FEASIBLE_TIMEOUT"
+    if refinement.changed:
+        return "COMPLETED_REFINED"
+    return "COMPLETED_UNCHANGED"
 
 
 def _remaining_seconds(deadline: float) -> float:

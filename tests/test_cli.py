@@ -144,6 +144,22 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(2, code)
                 self.assertIn(message, stderr.getvalue())
 
+    def test_low_use_affordable_bounds_must_not_be_negative(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            input_path = self.write(directory, "input.csv", "tc_id,lte band,ru\nT1,b1,any\n")
+            support_path = self.write(directory, "ru-band.csv", "ru,lte_band,nr_band\nRU1,b1,\n")
+            cases = (
+                ("--low-use-affordable-equipment-delta", "--low-use-affordable-equipment-delta must be zero or a positive integer"),
+                ("--low-use-affordable-excess-per-case", "--low-use-affordable-excess-per-case must be zero or a positive integer"),
+            )
+            for option, message in cases:
+                stderr = io.StringIO()
+                with redirect_stderr(stderr):
+                    code = run(["--input", str(input_path), "--ru-band", str(support_path), option, "-1"])
+                self.assertEqual(2, code)
+                self.assertIn(message, stderr.getvalue())
+
     def test_refine_output_rejects_parse_only_and_disabled_low_use(self):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
@@ -225,6 +241,8 @@ class CliTests(unittest.TestCase):
             with output_path.open(newline="", encoding="utf-8") as handle:
                 row = next(csv.DictReader(handle))
             self.assertEqual("FEASIBLE_LOW_USE_CHECKED", row["solve_status"])
+            self.assertEqual("OPTIMAL", row["main_solve_status"])
+            self.assertEqual("COMPLETED_UNCHANGED", row["low_use_refinement_status"])
             self.assertIn("Low-use specs remain: 1 selected specs have fewer than 10 assigned testcases", stderr.getvalue())
 
     def test_auto_solver_uses_ortools_when_available(self):
@@ -280,6 +298,8 @@ class CliTests(unittest.TestCase):
                 rows = list(csv.DictReader(handle))
             self.assertEqual(1, len(rows))
             self.assertEqual("FEASIBLE_TIMEOUT", rows[0]["solve_status"])
+            self.assertEqual("FEASIBLE_TIMEOUT", rows[0]["main_solve_status"])
+            self.assertEqual("COMPLETED_REFINED", rows[0]["low_use_refinement_status"])
 
     def test_auto_solver_falls_back_only_when_ortools_is_unavailable(self):
         try:

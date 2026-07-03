@@ -20,6 +20,8 @@ from .constants import (
     DEFAULT_MAX_NUMERIC_OVERAGE_RATIO,
     DEFAULT_MAX_NUMERIC_OVERAGE_UNITS,
     DEFAULT_MIN_ASSIGNED_CASES_PER_SPEC,
+    DEFAULT_LOW_USE_AFFORDABLE_EQUIPMENT_DELTA,
+    DEFAULT_LOW_USE_AFFORDABLE_EXCESS_PER_CASE,
     DEFAULT_TIMEOUT_SECONDS,
 )
 from .errors import InputError
@@ -87,6 +89,18 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=DEFAULT_MAX_LOW_USE_STDLIB_CANDIDATES,
         help="Maximum low-use refinement candidate pool size for the standard-library exact fallback.",
     )
+    parser.add_argument(
+        "--low-use-affordable-equipment-delta",
+        type=int,
+        default=DEFAULT_LOW_USE_AFFORDABLE_EQUIPMENT_DELTA,
+        help="Maximum cumulative equipment increase allowed during fast low-use evacuation.",
+    )
+    parser.add_argument(
+        "--low-use-affordable-excess-per-case",
+        type=int,
+        default=DEFAULT_LOW_USE_AFFORDABLE_EXCESS_PER_CASE,
+        help="Maximum cumulative assignment-excess increase per evacuated testcase row.",
+    )
     return parser.parse_args(argv)
 
 
@@ -119,6 +133,10 @@ def options_from_args(args: argparse.Namespace) -> SolveOptions:
         raise InputError("--max-low-use-merge-depth must be a positive integer")
     if args.max_low_use_stdlib_candidates < 1:
         raise InputError("--max-low-use-stdlib-candidates must be a positive integer")
+    if args.low_use_affordable_equipment_delta < 0:
+        raise InputError("--low-use-affordable-equipment-delta must be zero or a positive integer")
+    if args.low_use_affordable_excess_per_case < 0:
+        raise InputError("--low-use-affordable-excess-per-case must be zero or a positive integer")
     return SolveOptions(
         ignore_optional_columns=args.ignore_optional_columns,
         auto_assign=args.auto_assign,
@@ -138,6 +156,8 @@ def options_from_args(args: argparse.Namespace) -> SolveOptions:
         max_low_use_refinement_candidates=args.max_low_use_refinement_candidates,
         max_low_use_merge_depth=args.max_low_use_merge_depth,
         max_low_use_stdlib_candidates=args.max_low_use_stdlib_candidates,
+        low_use_affordable_equipment_delta=args.low_use_affordable_equipment_delta,
+        low_use_affordable_excess_per_case=args.low_use_affordable_excess_per_case,
     )
 
 

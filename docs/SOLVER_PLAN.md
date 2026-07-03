@@ -85,15 +85,17 @@ requirements.
   domains after RU/band wildcard expansion, so output never claims coverage that
   the rendered spec cannot actually provide.
 - Share final expanded assignment evaluation between output and low-use
-  analysis. Run an exact post-solve low-use refinement pass over a bounded
-  candidate pool that may remove, replace, or merge low-use specs while
-  minimizing low-use count and deficit before equipment and assignment-excess
-  deltas from the starting solution. The pass uses the remaining `--timeout`
-  budget and reports `FEASIBLE_TIMEOUT` if the bounded pool is capped or it
-  cannot prove refinement optimality.
+  analysis. Run a fast affordable evacuation pass before exact polishing. It
+  moves testcase rows assigned to low-use specs into existing receivers,
+  generated candidates, or merged low-use clusters while minimizing low-use
+  count and deficit before equipment and assignment-excess deltas from the
+  starting solution. Accepted moves are committed immediately so timeout keeps
+  the best incumbent.
 - Build the bounded low-use refinement pool deterministically from the selected
   specs, generated candidates touching low-use coverage, and merge-closure
-  candidates anchored to original low-use specs.
+  candidates anchored to original low-use specs. Use exact bounded optimization
+  only as optional polishing after fast evacuation, and never replace the
+  evacuation incumbent with a worse or unaffordable result.
 - Add `--low-use-refinement-timeout` so low-use refinement can receive a
   dedicated post-solve budget. When set, refinement still runs after a primary
   `FEASIBLE_TIMEOUT`; the final status remains `FEASIBLE_TIMEOUT` if the
@@ -105,6 +107,10 @@ requirements.
 - Use `FEASIBLE_LOW_USE_CHECKED` when low-use analysis completes without a
   change, and `FEASIBLE_LOW_USE_REFINED` when the bounded refinement changes the
   selected specs.
+- Keep final `solve_status` for compatibility, and also write
+  `main_solve_status` plus `low_use_refinement_status` so the primary optimizer
+  result and refinement pass result can be inspected independently. In
+  `--refine-output` mode, `main_solve_status` is `IMPORTED`.
 - Use OR-Tools CP-SAT as the preferred `auto` backend when installed, with the
   standard-library branch-and-bound solver kept behind `--solver stdlib` and as
   an `auto` fallback when OR-Tools is unavailable. Report OR-Tools
@@ -143,6 +149,8 @@ requirements.
   - `--max-low-use-refinement-candidates N`, default `5000`
   - `--max-low-use-merge-depth N`, default `8`
   - `--max-low-use-stdlib-candidates N`, default `300`
+  - `--low-use-affordable-equipment-delta N`, default `0`
+  - `--low-use-affordable-excess-per-case N`, default `3`
 - CLI progress and elapsed-time messages are written to stderr so parse-only
   JSON remains the only stdout payload.
 
@@ -174,10 +182,11 @@ requirements.
   it has greater equipment or assignment excess.
 - Solver tests proving low-use specs are reported, can be disabled with
   `--min-assigned-cases-per-spec 0`, and are refined by minimizing low-use count
-  and deficit before extra equipment and assignment-excess cost. Include exact
-  bounded-pool tests where greedy pairwise refinement would choose a worse merge
-  pattern, candidate-cap timeout tests, assignment-sensitive tests, and status
-  tests for checked, refined, disabled, and timeout cases.
+  and deficit before extra equipment and assignment-excess cost. Include fast
+  evacuation tests for iterative low-use merging, receiver absorption without
+  unrelated reassignment, affordability caps, exact bounded-pool polishing,
+  candidate-cap timeout tests, assignment-sensitive tests, and status tests for
+  checked, refined, disabled, and timeout cases.
 - Tests proving a primary `FEASIBLE_TIMEOUT` does not starve refinement when
   `--low-use-refinement-timeout` is set.
 - Refinement-only tests proving imported output metadata is ignored, current

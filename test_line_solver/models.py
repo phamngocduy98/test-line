@@ -56,6 +56,8 @@ class SolveOptions:
     max_low_use_refinement_candidates: int = 5000
     max_low_use_merge_depth: int = 8
     max_low_use_stdlib_candidates: int = 300
+    low_use_affordable_equipment_delta: int = 0
+    low_use_affordable_excess_per_case: int = 3
 
 
 @dataclass(frozen=True)
@@ -86,3 +88,5 @@ class Solution:
     candidates: tuple[Candidate, ...]
     assignments: dict[int, Candidate]
     status: str
+    main_status: str | None = None
+    refinement_status: str | None = None

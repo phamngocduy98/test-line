@@ -26,7 +26,15 @@ def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, sol
         )
     )
 
-    fieldnames = ["spec_id", "covered_tc_ids", "covered_count", "equipment_count", "solve_status"]
+    fieldnames = [
+        "spec_id",
+        "covered_tc_ids",
+        "covered_count",
+        "equipment_count",
+        "solve_status",
+        "main_solve_status",
+        "low_use_refinement_status",
+    ]
     if options.auto_assign:
         fieldnames += ["assigned_tc_ids", "assigned_count"]
     fieldnames += list(output_requirement_columns)
@@ -43,6 +51,8 @@ def write_solution_csv(path: Path, parsed: ParsedCsv, support: SupportTable, sol
                 "covered_count": str(len(coverage.row_indexes)),
                 "equipment_count": str(equipment_count(spec)),
                 "solve_status": solution.status,
+                "main_solve_status": solution.main_status or solution.status,
+                "low_use_refinement_status": solution.refinement_status or "",
             }
             if options.auto_assign:
                 row["assigned_tc_ids"] = _join_tc_ids(parsed, item.assigned_indexes)

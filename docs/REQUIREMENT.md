@@ -39,9 +39,10 @@ default. Low-use specs are undesirable, not invalid. Low-use refinement should
 try to merge or replace low-use specs until none remain when feasible. If
 eliminating low-use specs requires extra equipment or assignment excess, choose
 the lowest-cost refined solution after minimizing low-use count and deficit.
-That refined solution is exact over the completed bounded low-use refinement
-candidate pool. If the pool is capped or proof times out, the solver must keep
-the best valid refined solution found and report timeout-style status.
+The refinement must first run a fast affordable evacuation pass that commits
+improving moves immediately, then may use exact bounded optimization only as
+optional polishing. If the pool is capped or proof times out, the solver must
+keep the best valid refined solution found and report timeout-style status.
 
 The first rewrite milestone only needs to read the input CSV files and parse
 their cells into normalized requirement tokens.
@@ -249,6 +250,8 @@ Required output columns:
 | `covered_count` | integer | Number of covered testcases. |
 | `equipment_count` | integer | Equipment count for this spec. |
 | `solve_status` | string | Solver status, such as `OPTIMAL`, `FEASIBLE_TIMEOUT`, `FEASIBLE_LOW_USE_CHECKED`, or `FEASIBLE_LOW_USE_REFINED`. |
+| `main_solve_status` | string | Status returned by the primary optimizer, or `IMPORTED` in `--refine-output` mode. |
+| `low_use_refinement_status` | string | Low-use refinement pass status: `DISABLED`, `COMPLETED_UNCHANGED`, `COMPLETED_REFINED`, or `FEASIBLE_TIMEOUT`. |
 | input requirement columns | rendered requirement cell | Spec values for each input column except `tc_id`. |
 
 When auto-assignment is enabled, the output must also include:
@@ -328,17 +331,24 @@ Output formatting rules:
 - `--max-low-use-stdlib-candidates N` caps when the standard-library exact
   low-use refinement fallback is allowed to prove optimality without OR-Tools.
   The default is `300`; `N` must be a positive integer.
+- `--low-use-affordable-equipment-delta N` caps cumulative equipment increase
+  allowed during fast low-use evacuation. The default is `0`; `N` must be zero
+  or a positive integer.
+- `--low-use-affordable-excess-per-case N` caps cumulative assignment-excess
+  increase per testcase row evacuated from its original low-use spec. The
+  default is `3`; `N` must be zero or a positive integer.
 - The CLI should print progress messages and final elapsed time to stderr so
   stdout remains usable for `--parse-only` JSON output.
 
 In `--refine-output` mode, imported output metadata such as `spec_id`,
 `covered_tc_ids`, `covered_count`, `equipment_count`, `solve_status`,
-`assigned_tc_ids`, and `assigned_count` must not be trusted. Coverage,
-assignment, equipment, and status are recomputed from the current input,
-support table, and options. The imported output must contain all current input
-requirement columns except `tc_id`; unknown extra columns, malformed cells,
-duplicate imported specs, incompatible specs, zero-coverage specs, and specs
-that do not cover every current testcase must be rejected.
+`main_solve_status`, `low_use_refinement_status`, `assigned_tc_ids`, and
+`assigned_count` must not be trusted. Coverage, assignment, equipment, and
+status are recomputed from the current input, support table, and options. The
+imported output must contain all current input requirement columns except
+`tc_id`; unknown extra columns, malformed cells, duplicate imported specs,
+incompatible specs, zero-coverage specs, and specs that do not cover every
+current testcase must be rejected.
 
 ## Performance Requirements
 
@@ -376,6 +386,11 @@ Default performance behavior:
   still run for up to that dedicated budget after a primary `FEASIBLE_TIMEOUT`
   result. The final status remains `FEASIBLE_TIMEOUT` if the primary solver
   timed out or if refinement does not complete.
+- The output also reports per-pass statuses. `main_solve_status` preserves the
+  primary optimizer status even when final `solve_status` changes after
+  low-use checking. `low_use_refinement_status` reports whether refinement was
+  disabled, completed unchanged, completed with changes, or returned a valid
+  incumbent without completing/proving the refinement search.
 - When low-use analysis is enabled and completes without changing the primary
   solution, output that solution with `solve_status` set to
   `FEASIBLE_LOW_USE_CHECKED`.
@@ -384,11 +399,12 @@ Default performance behavior:
   `FEASIBLE_LOW_USE_REFINED`.
 - `OPTIMAL` means optimal over the generated candidate pool under the primary
   guardrails and budgets, not over every theoretical possible spec. Low-use
-  refinement proves optimality only over the completed bounded refinement pool.
-  If low-use refinement candidate generation is capped, OR-Tools or the
-  standard-library fallback cannot prove optimality, or the refinement timeout
-  expires, the final status must be timeout-style rather than claiming proven
-  low-use optimality.
+  refinement prioritizes preserving fast affordable improvements. Exact
+  low-use polishing proves optimality only over the completed bounded
+  refinement pool. If low-use refinement candidate generation is capped,
+  OR-Tools or the standard-library fallback cannot prove optimality, or the
+  refinement timeout expires, the final status must be timeout-style rather
+  than claiming proven low-use optimality.
 
 ## First Milestone Expected Output
 
@@ -494,6 +510,10 @@ are then minimized as the extra cost of the low-use reduction. The refinement
 optimizer must model testcase assignment directly so low-use counts, deficits,
 and output `assigned_count` values describe the optimized assignments rather
 than a separate greedy post-processing pass.
+The fast evacuation pass only moves testcase rows assigned to low-use specs,
+except that replacing an existing receiver with a merged receiver may preserve
+that receiver's current assignments. It must not borrow unrelated non-low
+assignments merely to make a new receiver reach the low-use threshold.
 
 Example:
 
